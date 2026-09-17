@@ -4,7 +4,7 @@ on:
     branches: [ech-conscrypt]
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: ech-android-${{ github.ref }}
   cancel-in-progress: false
@@ -32,16 +32,13 @@ jobs:
           ECH_DOH_POOL: ${{ secrets.ECH_DOH_POOL }}
         run: |
           ./gradlew :android:assembleDebug -PenableIos=false --stacktrace
-      - name: 保存测试包
-        uses: actions/upload-artifact@v4
-        with:
-          name: bangumi-ech-debug-${{ github.sha }}
-          path: android/build/outputs/apk/debug/*arm64-v8a*.apk
-          if-no-files-found: error
-      - name: 保存构建报告
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-reports
-          path: '**/build/reports/'
-          if-no-files-found: ignore
+      - name: 保存私有测试包
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create "test-${GITHUB_RUN_ID}" \
+            android/build/outputs/apk/debug/*arm64-v8a*.apk \
+            --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title "安卓测试 ${GITHUB_SHA:0:8}" \
+            --notes "提交：$GITHUB_SHA。仅原生网络 ECH 测试，WebView 尚未接入，禁止输入真实账号。"
