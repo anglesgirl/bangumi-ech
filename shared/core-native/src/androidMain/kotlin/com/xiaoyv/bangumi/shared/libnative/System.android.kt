@@ -13,6 +13,8 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import com.xiaoyv.bangumi.shared.libnative.database.DatabaseDriverFactory
+import com.xiaoyv.bangumi.shared.libnative.ech.BgmEchPolicy
+import com.xiaoyv.bangumi.shared.libnative.ech.BgmEchTransport
 import com.xiaoyv.bangumi.shared.libnative.sni.AntiSniDns
 import com.xiaoyv.bangumi.shared.libnative.sni.AntiSniSocketFactory
 import com.xiaoyv.bangumi.shared.libnative.sni.DomainTlsFragmentationPolicy
@@ -119,16 +121,18 @@ actual object System {
         block: HttpClientConfig<*>.() -> Unit
     ): HttpClient {
         return HttpClient(OkHttp) {
-            if (customResolve) {
-                engine {
-                    config {
-                        socketFactory(AntiSniSocketFactory(DomainTlsFragmentationPolicy(tlsFragmentationDomains)))
+            block()
+            engine {
+                config {
+                    if (customResolve) {
+                        val legacyDomains = tlsFragmentationDomains.filterNot(BgmEchPolicy::isProtected).toSet()
+                        socketFactory(AntiSniSocketFactory(DomainTlsFragmentationPolicy(legacyDomains)))
                         dns(AntiSniDns(hosts))
                         sslSocketFactory(antiSniTlsEngine.socketFactory, antiSniTlsEngine.trustManager)
                     }
+                    BgmEchTransport.configure(this)
                 }
             }
-            block()
         }
     }
 }

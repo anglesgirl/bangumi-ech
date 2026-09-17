@@ -41,6 +41,9 @@
 -dontwarn okhttp3.internal.platform.**
 -dontwarn okhttp3.internal.Util
 -dontwarn org.conscrypt.**
+-keep class org.conscrypt.** { *; }
+# Conscrypt 通过反射查找此方法；不能被 R8 改名或删除。
+-keep class com.xiaoyv.bangumi.shared.libnative.ech.BgmEchPolicy$PolicyTrustManager { *; }
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
 -keep class okio.** { *; }

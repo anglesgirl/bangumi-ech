@@ -51,7 +51,8 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.avif.coder)
             implementation(libs.androidx.webkit)
-            implementation(libs.conscrypt.android)
+            // 安卓 ECH 策略依赖；不改变 JVM 的 Conscrypt 版本。
+            implementation("org.conscrypt:conscrypt-android:2.7.0")
         }
 
         iosMain.dependencies {

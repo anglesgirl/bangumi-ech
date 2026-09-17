@@ -33,6 +33,13 @@ android {
         versionCode = appVersionCode
         versionName = appVersionName
 
+        // 网关地址只从构建环境注入；未提供时运行时明确阻断。
+        val echDohPool = providers.environmentVariable("ECH_DOH_POOL").orElse("").get()
+        require(echDohPool.matches(Regex("[-A-Za-z0-9:/.,_?=%+]*"))) {
+            "ECH_DOH_POOL 包含不支持的字符"
+        }
+        resValue("string", "ech_doh_pool", echDohPool)
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["clearPackageData"] = "false"
     }
