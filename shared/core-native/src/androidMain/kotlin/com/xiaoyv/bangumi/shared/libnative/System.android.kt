@@ -13,12 +13,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import com.xiaoyv.bangumi.shared.libnative.database.DatabaseDriverFactory
-import com.xiaoyv.bangumi.shared.libnative.ech.BgmEchPolicy
 import com.xiaoyv.bangumi.shared.libnative.ech.BgmEchTransport
-import com.xiaoyv.bangumi.shared.libnative.sni.AntiSniDns
-import com.xiaoyv.bangumi.shared.libnative.sni.AntiSniSocketFactory
-import com.xiaoyv.bangumi.shared.libnative.sni.DomainTlsFragmentationPolicy
-import com.xiaoyv.bangumi.shared.libnative.sni.antiSniTlsEngine
 import com.xiaoyv.bangumi.shared.native.AppDatabase
 import io.github.vinceglb.filekit.readBytes
 import io.ktor.client.HttpClient
@@ -68,7 +63,7 @@ actual object System {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val intent = Intent(
                 Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS,
-                "package:com.xiaoyv.bangumi.multiplatform".toUri()
+                "package:com.anglesgirl.bangumi.ech".toUri()
             )
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             application.startActivity(intent)
@@ -124,12 +119,6 @@ actual object System {
             block()
             engine {
                 config {
-                    if (customResolve) {
-                        val legacyDomains = tlsFragmentationDomains.filterNot(BgmEchPolicy::isProtected).toSet()
-                        socketFactory(AntiSniSocketFactory(DomainTlsFragmentationPolicy(legacyDomains)))
-                        dns(AntiSniDns(hosts))
-                        sslSocketFactory(antiSniTlsEngine.socketFactory, antiSniTlsEngine.trustManager)
-                    }
                     BgmEchTransport.configure(this)
                 }
             }

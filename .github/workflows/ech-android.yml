@@ -23,10 +23,24 @@ jobs:
         with:
           packages: 'platform-tools platforms;android-37.0'
           log-accepted-android-sdk-licenses: false
+      - name: 注入 Firebase 配置
+        env:
+          FIREBASE_CONFIG: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          config = json.loads(os.environ["FIREBASE_CONFIG"])
+          packages = [c["client_info"]["android_client_info"]["package_name"] for c in config["client"]]
+          assert "com.anglesgirl.bangumi.ech" in packages, "Firebase 包名不匹配"
+          assert config["project_info"]["project_id"] == "bangumi-49d41", "Firebase 项目不匹配"
+          Path("android/google-services.json").write_text(json.dumps(config))
+          PY
       - name: 源码门禁
         run: |
           python3 tools/check_ech_policy.py
           python3 tools/check_ech_transport.py
+          python3 tools/check_firebase_config.py
       - name: 构建安卓测试包
         env:
           ECH_DOH_POOL: ${{ secrets.ECH_DOH_POOL }}

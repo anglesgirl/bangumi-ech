@@ -11,7 +11,13 @@ doh = read(native / 'ech/BgmEchDoh.kt')
 system = read(native / 'System.android.kt')
 checks = {
     '统一入口无条件安装 ECH': 'BgmEchTransport.configure(this)' in system,
-    '原 TLS 分片排除保护域名': 'tlsFragmentationDomains.filterNot(BgmEchPolicy::isProtected)' in system,
+    '统一入口仅保留 ECH 接线': 'config {\n                    BgmEchTransport.configure(this)\n                }' in system,
+    '统一入口无旧分片和 DNS 接线': not any(token in system for token in (
+        'if (customResolve)', 'AntiSni', 'antiSniTlsEngine', 'DomainTlsFragmentationPolicy',
+        'socketFactory(', 'sslSocketFactory(', 'dns(',
+    )),
+    '旧分片工厂和 TLS 引擎已移除': not (native / 'sni/AntiSniSocketFactory.kt').exists()
+        and not (native / 'sni/AntiSniTlsEngine.kt').exists(),
     '握手前注入真实配置': 'Conscrypt.setEchConfigList(socket, config)' in transport,
     '使用带策略的信任管理器': 'BgmEchPolicy.PolicyTrustManager' in transport,
     '保护域名 DNS 不回落系统': 'return BgmEchDoh.resolve(hostname)' in transport,

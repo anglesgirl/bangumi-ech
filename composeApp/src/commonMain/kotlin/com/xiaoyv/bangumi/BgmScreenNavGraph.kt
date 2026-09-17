@@ -51,7 +51,6 @@ import com.xiaoyv.bangumi.features.search.result.searchResultModule
 import com.xiaoyv.bangumi.features.settings.account.settingsAccountModule
 import com.xiaoyv.bangumi.features.settings.bar.settingsBarModule
 import com.xiaoyv.bangumi.features.settings.block.settingsBlockModule
-import com.xiaoyv.bangumi.features.settings.dns.settingsDnsResolverModule
 import com.xiaoyv.bangumi.features.settings.live2d.settingsLive2dModule
 import com.xiaoyv.bangumi.features.settings.main.settingsMainModule
 import com.xiaoyv.bangumi.features.settings.network.settingsNetworkModule
@@ -96,7 +95,6 @@ internal val navigationModule = module {
         settingsAccountModule,
         settingsBarModule,
         settingsBlockModule,
-        settingsDnsResolverModule,
         settingsLive2dModule,
         settingsNetworkModule,
         settingsPrivacyModule,

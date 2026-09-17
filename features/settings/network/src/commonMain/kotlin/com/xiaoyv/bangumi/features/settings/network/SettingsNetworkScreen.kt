@@ -20,20 +20,16 @@ import androidx.compose.ui.unit.dp
 import com.xiaoyv.bangumi.core_resource.resources.Res
 import com.xiaoyv.bangumi.core_resource.resources.global_domain
 import com.xiaoyv.bangumi.core_resource.resources.global_pixiv
-import com.xiaoyv.bangumi.core_resource.resources.global_proxy
 import com.xiaoyv.bangumi.core_resource.resources.global_req_timeout
 import com.xiaoyv.bangumi.core_resource.resources.global_update
 import com.xiaoyv.bangumi.core_resource.resources.settings_domain_bgm
 import com.xiaoyv.bangumi.core_resource.resources.settings_domain_bgm_change_desc
 import com.xiaoyv.bangumi.core_resource.resources.settings_domain_bgm_change_title
 import com.xiaoyv.bangumi.core_resource.resources.settings_domain_pixiv
-import com.xiaoyv.bangumi.core_resource.resources.settings_domain_resolver
-import com.xiaoyv.bangumi.core_resource.resources.settings_domain_resolver_desc
 import com.xiaoyv.bangumi.core_resource.resources.settings_dou_ban
 import com.xiaoyv.bangumi.core_resource.resources.settings_network
 import com.xiaoyv.bangumi.core_resource.resources.settings_timeout_request
 import com.xiaoyv.bangumi.core_resource.resources.settings_timeout_socket
-import com.xiaoyv.bangumi.core_resource.resources.settings_tls_fragment
 import com.xiaoyv.bangumi.core_resource.resources.settings_update_channel
 import com.xiaoyv.bangumi.core_resource.resources.settings_update_notify
 import com.xiaoyv.bangumi.features.settings.network.business.SettingsNetworkEvent
@@ -50,7 +46,6 @@ import com.xiaoyv.bangumi.shared.ui.component.layout.state.StateLayout
 import com.xiaoyv.bangumi.shared.ui.component.navigation.Screen
 import com.xiaoyv.bangumi.shared.ui.component.settings.SettingContainer
 import com.xiaoyv.bangumi.shared.ui.component.settings.SettingInputItem
-import com.xiaoyv.bangumi.shared.ui.component.settings.SettingItem
 import com.xiaoyv.bangumi.shared.ui.component.settings.SettingOptionItem
 import com.xiaoyv.bangumi.shared.ui.component.settings.SettingSwitchItem
 import com.xiaoyv.bangumi.shared.ui.composition.TabTokens
@@ -151,28 +146,6 @@ private fun SettingsNetworkScreenContent(
                     } else {
                         onActionEvent(SettingsNetworkEvent.Action.OnUpdateBgmHost(it))
                     }
-                }
-            )
-        }
-
-        SettingContainer(label = { Text(text = stringResource(Res.string.global_proxy)) }) {
-            SettingSwitchItem(
-                title = stringResource(Res.string.settings_tls_fragment),
-                shape = ListItemDefaults.segmentedShapes(0, 2),
-                value = settings.network.customResolve,
-                onValueChange = {
-                    onActionEvent(SettingsNetworkEvent.Action.OnUpdate(settings.network.copy(customResolve = it)))
-                },
-            )
-            SettingItem(
-                title = stringResource(Res.string.settings_domain_resolver),
-                supportingContent = {
-                    Text(text = stringResource(Res.string.settings_domain_resolver_desc))
-                },
-                enabled = settings.network.customResolve,
-                shape = ListItemDefaults.segmentedShapes(1, 2),
-                onClick = {
-                    onUiEvent(SettingsNetworkEvent.UI.OnNavScreen(Screen.DnsResolver))
                 }
             )
         }

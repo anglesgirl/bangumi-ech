@@ -88,7 +88,6 @@ val stateConfiguration = SavedStateConfiguration {
             subclass(Screen.Web::class, Screen.Web.serializer())
             subclass(Screen.Calendar::class, Screen.Calendar.serializer())
             subclass(Screen.Workflows::class, Screen.Workflows.serializer())
-            subclass(Screen.DnsResolver::class, Screen.DnsResolver.serializer())
             subclass(Screen.Report::class, Screen.Report.serializer())
         }
     }
@@ -107,9 +106,6 @@ sealed class Screen(
 
     @Serializable
     data object Splash : Screen(SCREEN_ROUTE_SPLASH)
-
-    @Serializable
-    data object DnsResolver : Screen(SCREEN_ROUTE_DNS)
 
     @Serializable
     data class Report(@ReportType val type: Int, val targetId: Long) : Screen(SCREEN_ROUTE_REPORT)

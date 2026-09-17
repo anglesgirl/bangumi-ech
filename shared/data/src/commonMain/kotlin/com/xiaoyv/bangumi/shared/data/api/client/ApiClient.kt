@@ -110,13 +110,6 @@ class ApiClient(
         )
     }
 
-    val dnsHttpClient by lazy {
-        createHttpClient(
-            config = config.copy(connectTimeoutMillis = 10_000L, socketTimeoutMillis = 10_000L),
-            enableJsonContentNegotiation = false,
-        )
-    }
-
     private val authKtorfit by lazy {
         createApiKtorfit(authClient, config.bgmHost)
     }

@@ -7,8 +7,6 @@ import com.xiaoyv.bangumi.shared.data.model.response.chore.ComposeBangumiStatus
 import io.github.vinceglb.filekit.PlatformFile
 
 interface ChoreRepository {
-    suspend fun fetchDns(hostname: String): Result<Pair<String, List<String>>>
-
     suspend fun fetchPictureFileByUrl(url: String): Result<PlatformFile>
 
     suspend fun compressImageAndUpload(file: PlatformFile): Result<ComposeUploadImage>

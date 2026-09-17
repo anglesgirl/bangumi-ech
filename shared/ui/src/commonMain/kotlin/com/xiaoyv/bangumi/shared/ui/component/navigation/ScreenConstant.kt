@@ -12,7 +12,6 @@ const val EXTRA_TEXT = "text"
 const val EXTRA_TITLE = "title"
 
 const val SCREEN_ROUTE_SPLASH = "splash"
-const val SCREEN_ROUTE_DNS = "dns"
 const val SCREEN_ROUTE_TOPIC_DETAIL = "topic"
 const val SCREEN_ROUTE_TOPIC_PAGE = "topic_page"
 const val SCREEN_ROUTE_MAIN = "main"

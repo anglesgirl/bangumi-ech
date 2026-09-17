@@ -33,6 +33,10 @@
         android:usesCleartextTraffic="true"
         tools:ignore="UnusedAttribute">
 
+        <!-- 仅运行统计：不采集广告标识，不用于广告个性化。 -->
+        <meta-data android:name="google_analytics_adid_collection_enabled" android:value="false" />
+        <meta-data android:name="google_analytics_default_allow_ad_personalization_signals" android:value="false" />
+
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"

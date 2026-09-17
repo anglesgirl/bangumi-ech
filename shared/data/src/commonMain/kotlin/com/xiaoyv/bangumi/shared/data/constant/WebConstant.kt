@@ -30,9 +30,6 @@ object WebConstant {
         URL_BASE_PIXIV_APP_API,
         URL_BASE_PIXIV_ACCOUNT,
     )
-
-    const val CLOUDFLARE_DNS_ENDPOINT_1 = "https://xwfpeb16ii.cloudflare-gateway.com/dns-query"
-    const val CLOUDFLARE_DNS_ENDPOINT_2 = "${URL_BGM_PROXY}dns-query"
 }
 
 fun subjectImage(id: Long, type: String = "large") = "https://api.bgm.tv/v0/subjects/$id/image?type=$type"

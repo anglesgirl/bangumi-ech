@@ -7,6 +7,7 @@ plugins {
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.android.application")
+    id("com.google.gms.google-services") version "4.5.0"
     alias(libs.plugins.baselineprofile)
 }
 
@@ -27,7 +28,7 @@ android {
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "com.xiaoyv.bangumi.multiplatform"
+        applicationId = "com.anglesgirl.bangumi.ech"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = appVersionCode
@@ -110,6 +111,9 @@ android {
 }
 
 dependencies {
+    implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
+    implementation("com.google.firebase:firebase-analytics")
+
     implementation(projects.composeApp)
 
     implementation(libs.bundles.compose.common)

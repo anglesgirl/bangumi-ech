@@ -7,12 +7,9 @@ import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import com.xiaoyv.bangumi.shared.core.types.settings.SettingUpdateChannel
 import com.xiaoyv.bangumi.shared.core.utils.defaultJson
-import com.xiaoyv.bangumi.shared.core.utils.isIpv4Address
 import com.xiaoyv.bangumi.shared.core.utils.runResult
 import com.xiaoyv.bangumi.shared.data.api.client.ApiClient
-import com.xiaoyv.bangumi.shared.data.constant.WebConstant
 import com.xiaoyv.bangumi.shared.data.model.response.bgm.ComposeUploadImage
-import com.xiaoyv.bangumi.shared.data.model.response.chore.CloudflareDnsResponse
 import com.xiaoyv.bangumi.shared.data.model.response.chore.ComposeAppRelease
 import com.xiaoyv.bangumi.shared.data.model.response.chore.ComposeBangumiStatus
 import com.xiaoyv.bangumi.shared.data.model.response.trace.MicrosoftTranslate
@@ -34,52 +31,12 @@ import io.github.vinceglb.filekit.write
 import io.ktor.client.request.forms.InputProvider
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
-import io.ktor.client.request.get
-import io.ktor.client.request.header
-import io.ktor.client.request.parameter
-import io.ktor.client.statement.bodyAsText
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 import kotlinx.io.buffered
 import okio.ByteString.Companion.encodeUtf8
 
 class ChoreRepositoryImpl(private val client: ApiClient) : ChoreRepository {
-
-    override suspend fun fetchDns(hostname: String): Result<Pair<String, List<String>>> = runResult {
-        val normalizedHostname = hostname.trim().lowercase().removeSuffix(".")
-        require(normalizedHostname.isNotBlank()) { "Hostname cannot be blank" }
-
-        val endpoints = listOf(WebConstant.CLOUDFLARE_DNS_ENDPOINT_1, WebConstant.CLOUDFLARE_DNS_ENDPOINT_2)
-        var lastException: Throwable? = null
-
-        for (endpoint in endpoints) {
-            try {
-                val httpResponse = client.dnsHttpClient.get(endpoint) {
-                    parameter("name", normalizedHostname)
-                    parameter("type", "A")
-                    header(HttpHeaders.Accept, "application/dns-json")
-                }
-                if (httpResponse.status.value in 200..299) {
-                    val response = defaultJson.decodeFromString<CloudflareDnsResponse>(httpResponse.bodyAsText())
-                    if (response.status == 0) {
-                        val addresses = response.answers
-                            .asSequence()
-                            .filter { it.type == 1 }
-                            .map { it.data.trim() }
-                            .filter { it.isIpv4Address() }
-                            .distinct()
-                            .toList()
-                        if (addresses.isNotEmpty()) {
-                            return@runResult normalizedHostname to addresses
-                        }
-                    }
-                }
-            } catch (e: Throwable) {
-                lastException = e
-            }
-        }
-        throw lastException ?: IllegalStateException("No IPv4 address found for $normalizedHostname via DoH")
-    }
 
     @OptIn(ExperimentalCoilApi::class)
     override suspend fun fetchPictureFileByUrl(url: String): Result<PlatformFile> = runResult {
