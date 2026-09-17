@@ -30,6 +30,14 @@ dependencyResolutionManagement {
         mavenLocal()
         maven("https://jogamp.org/deployment/maven")
         maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
+        exclusiveContent {
+            forRepository {
+                maven("https://maven.aliyun.com/repository/public")
+            }
+            filter {
+                includeGroup("com.github.promeg")
+            }
+        }
         maven("https://maven.aliyun.com/repository/public")
         maven("https://jitpack.io")
     }
