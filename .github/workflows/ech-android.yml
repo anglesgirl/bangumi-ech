@@ -31,7 +31,23 @@ jobs:
         env:
           ECH_DOH_POOL: ${{ secrets.ECH_DOH_POOL }}
         run: |
-          ./gradlew :android:assembleDebug -PenableIos=false --stacktrace
+          test -n "$ECH_DOH_POOL" || { printf '缺少 ECH 网关配置\n'; exit 1; }
+          { free -h; df -h .; } | tee runner-resources.log
+          set +e
+          ./gradlew :android:assembleDebug -PenableIos=false --stacktrace --console=plain --max-workers=2 --no-parallel --no-daemon -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" -Pkotlin.daemon.jvmargs=-Xmx1g 2>&1 | tee gradle-build.log
+          result=${PIPESTATUS[0]}
+          { free -h; df -h .; } >> runner-resources.log
+          exit "$result"
+      - name: 保存诊断日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-diagnostics-${{ github.run_id }}
+          path: |
+            gradle-build.log
+            runner-resources.log
+          retention-days: 3
+          if-no-files-found: ignore
       - name: 保存私有测试包
         env:
           GH_TOKEN: ${{ github.token }}
