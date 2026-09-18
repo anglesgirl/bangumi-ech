@@ -10,7 +10,10 @@ import org.json.JSONObject
 import java.io.IOException
 import java.net.InetAddress
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * 从构建注入的网关获取 DNS 与 ECH 配置。空配置和解析失败均阻断。
@@ -23,10 +26,17 @@ internal object BgmEchDoh {
 
     /** 网关条目：URL 与其自带地址。受污染的网络里不能用系统 DNS 解析网关域名。 */
     private data class Endpoint(val url: HttpUrl, val addresses: List<InetAddress>)
-    private val addresses = mutableMapOf<String, Entry<List<InetAddress>>>()
+    private val addresses = ConcurrentHashMap<String, Entry<List<InetAddress>>>()
     /** ECH 记录里的 ipv4hint：CF 建议配合 ECH 使用的地址，常与 A 记录不是同一组。 */
-    private val hints = mutableMapOf<String, Entry<List<InetAddress>>>()
-    private val configs = mutableMapOf<String, Entry<ByteArray>>()
+    private val hints = ConcurrentHashMap<String, Entry<List<InetAddress>>>()
+    private val configs = ConcurrentHashMap<String, Entry<ByteArray>>()
+    /**
+     * 每个主机一把锁：不同主机的 DoH 查询互不排队。
+     * 以前是对象级锁，一屏图片会一个个等着取地址，这是"加载慢"的主因之一。
+     */
+    private val hostLocks = ConcurrentHashMap<String, Any>()
+    private fun lockFor(host: String): Any = hostLocks.computeIfAbsent(host) { Any() }
+    private fun now(): Long = java.lang.System.currentTimeMillis()
     private val preferences by lazy { application.getSharedPreferences("ech_doh_state", 0) }
     /**
      * 网关池格式 `https://网关/路径|IP|IP`，逗号分隔多条。
@@ -61,73 +71,108 @@ internal object BgmEchDoh {
             .build()
     }
 
-    @Synchronized
-    fun resolve(hostname: String): List<InetAddress> {
+    fun resolve(hostname: String): List<InetAddress> = resolve(hostname, bestEffort = false)
+
+    private fun resolve(hostname: String, bestEffort: Boolean): List<InetAddress> {
         val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
         val pool = endpoints
-        addresses[host]?.let { if (it.until > java.lang.System.currentTimeMillis()) return it.value }
-        return guarded {
-            val json = fetch(pool, host, "A")
-            val answer = json.getJSONArray("Answer")
-            val result = mutableListOf<InetAddress>()
-            var ttl = 300L
-            for (i in 0 until answer.length()) {
-                val item = answer.getJSONObject(i)
-                if (item.optInt("type") != 1) continue
-                result += parseIpv4Literal(item.getString("data"))
-                ttl = minOf(ttl, item.getLong("TTL").coerceAtLeast(0))
+        synchronized(lockFor(host)) {
+            addresses[host]?.let { if (it.until > now()) return it.value }
+            return guarded(bestEffort) {
+                val json = fetch(pool, host, "A")
+                val answer = json.getJSONArray("Answer")
+                val result = mutableListOf<InetAddress>()
+                var ttl = 300L
+                for (i in 0 until answer.length()) {
+                    val item = answer.getJSONObject(i)
+                    if (item.optInt("type") != 1) continue
+                    result += parseIpv4Literal(item.getString("data"))
+                    ttl = minOf(ttl, item.getLong("TTL").coerceAtLeast(0))
+                }
+                if (result.isEmpty()) throw IOException("DoH 没有有效地址")
+                addresses[host] = Entry(result, now() + ttl * 1000)
+                result
             }
-            if (result.isEmpty()) throw IOException("DoH 没有有效地址")
-            addresses[host] = Entry(result, java.lang.System.currentTimeMillis() + ttl * 1000)
-            result
         }
     }
 
     /** ECH 记录里的 hint 地址；取配置失败时抛错（与 ECH 同样的 fail-closed 语义）。 */
-    @Synchronized
-    fun hints(hostname: String): List<InetAddress> {
-        val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
-        hints[host]?.let { if (it.until > java.lang.System.currentTimeMillis()) return it.value }
-        echConfig(host)
-        return hints[host]?.value.orEmpty()
-    }
+    fun hints(hostname: String): List<InetAddress> = hints(hostname, bestEffort = false)
 
-    @Synchronized
-    fun echConfig(hostname: String): ByteArray {
+    private fun hints(hostname: String, bestEffort: Boolean): List<InetAddress> {
         val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
-        val pool = endpoints
-        configs[host]?.let { if (it.until > java.lang.System.currentTimeMillis()) return it.value }
-        return guarded {
-            val json = fetch(pool, host, "HTTPS")
-            val answer = json.getJSONArray("Answer")
-            var selected: ByteArray? = null
-            var ttl = 300L
-            for (i in 0 until answer.length()) {
-                val item = answer.getJSONObject(i)
-                if (item.optInt("type") != 65) continue
-                val encoded = Regex("(?:^|\\s)ech=\"?([A-Za-z0-9+/=]+)").find(item.getString("data"))
-                    ?.groupValues?.get(1) ?: continue
-                val wire = Base64.decode(encoded, Base64.DEFAULT)
-                validateConfig(wire)
-                selected = wire
-                ttl = item.getLong("TTL").coerceIn(0, 300)
-                hints[host] = Entry(parseHints(item.getString("data")), java.lang.System.currentTimeMillis() + ttl * 1000)
-                break
-            }
-            val result = selected ?: throw IOException("网关未提供 ECH 配置，已阻断")
-            configs[host] = Entry(result, java.lang.System.currentTimeMillis() + ttl * 1000)
-            result
+        synchronized(lockFor(host)) {
+            hints[host]?.let { if (it.until > now()) return it.value }
+            echConfig(host, bestEffort)
+            return hints[host]?.value.orEmpty()
         }
     }
 
-    private fun <T> guarded(block: () -> T): T {
-        val now = java.lang.System.currentTimeMillis()
+    private val warmedUp = AtomicBoolean(false)
+    private val warmUpPool by lazy {
+        Executors.newFixedThreadPool(2) { runnable ->
+            Thread(runnable, "ech-doh-warmup").apply { isDaemon = true }
+        }
+    }
+
+    /**
+     * 启动预热：提前把地址与 ECH 配置放进缓存，用户第一屏就不用在关键路径上等 DoH。
+     * 预热失败**不写冷却**（网关抖动不该被放大成 5 分钟不可用），真正要用时仍按原逻辑失败即阻断。
+     */
+    fun warmUp(hostnames: Collection<String>) {
+        if (!warmedUp.compareAndSet(false, true)) return
+        hostnames.forEach { hostname ->
+            runCatching {
+                warmUpPool.execute {
+                    runCatching { resolve(hostname, bestEffort = true) }
+                    runCatching { hints(hostname, bestEffort = true) }
+                }
+            }
+        }
+    }
+
+    fun echConfig(hostname: String): ByteArray = echConfig(hostname, bestEffort = false)
+
+    private fun echConfig(hostname: String, bestEffort: Boolean): ByteArray {
+        val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
+        val pool = endpoints
+        synchronized(lockFor(host)) {
+            configs[host]?.let { if (it.until > now()) return it.value }
+            return guarded(bestEffort) {
+                val json = fetch(pool, host, "HTTPS")
+                val answer = json.getJSONArray("Answer")
+                var selected: ByteArray? = null
+                var ttl = 300L
+                for (i in 0 until answer.length()) {
+                    val item = answer.getJSONObject(i)
+                    if (item.optInt("type") != 65) continue
+                    val encoded = Regex("(?:^|\\s)ech=\"?([A-Za-z0-9+/=]+)").find(item.getString("data"))
+                        ?.groupValues?.get(1) ?: continue
+                    val wire = Base64.decode(encoded, Base64.DEFAULT)
+                    validateConfig(wire)
+                    selected = wire
+                    ttl = item.getLong("TTL").coerceIn(0, 300)
+                    hints[host] = Entry(parseHints(item.getString("data")), now() + ttl * 1000)
+                    break
+                }
+                val result = selected ?: throw IOException("网关未提供 ECH 配置，已阻断")
+                configs[host] = Entry(result, now() + ttl * 1000)
+                result
+            }
+        }
+    }
+
+    private fun <T> guarded(bestEffort: Boolean, block: () -> T): T {
+        val current = now()
         val blockedUntil = preferences.getLong("blocked_until", 0)
-        if (blockedUntil > now) throw IOException("DoH 冷却中，剩余 ${(blockedUntil - now + 999) / 1000} 秒")
+        if (blockedUntil > current) {
+            throw IOException("DoH 冷却中，剩余 ${(blockedUntil - current + 999) / 1000} 秒")
+        }
         return try {
             block()
         } catch (e: Exception) {
-            preferences.edit().putLong("blocked_until", java.lang.System.currentTimeMillis() + 300_000L).commit()
+            if (bestEffort) throw IOException("DoH 预热失败（不影响后续请求）")
+            preferences.edit().putLong("blocked_until", now() + 300_000L).commit()
             // 仅下一次用户操作可选备用节点；本次失败不自动重发。
             val next = preferences.getInt("endpoint_index", 0).toLong() + 1
             preferences.edit().putInt("endpoint_index", (next % Int.MAX_VALUE).toInt()).commit()

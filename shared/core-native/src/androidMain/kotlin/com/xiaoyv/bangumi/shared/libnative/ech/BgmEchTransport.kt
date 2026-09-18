@@ -58,6 +58,8 @@ internal object BgmEchTransport {
                 return original.dns.lookup(hostname)
             }
         })
+        // 冷启动预热：把常用主机的地址与 ECH 配置先取回来（失败静默，不进冷却）。
+        BgmEchDoh.warmUp(BgmEchPolicy.warmUpHosts())
         // 严格委托上游主机名校验；非默认验证器同时禁止 OkHttp 跨主机 H2 合并连接，
         // 防止保护域名借用另一主机已建立的非 ECH TLS 连接。
         builder.hostnameVerifier(HostnameVerifier { host, session ->

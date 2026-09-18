@@ -30,6 +30,8 @@ object BgmEchPolicy {
         "challenges.cloudflare.com",
         // 第三方图床：CF 上但没开 ECH，只帮它换掉污染地址。
         "i.pixiv.re",
+        // AnimePic 图源：同样没有 ECH 记录，按用户挂载的地址走。
+        "anime-pictures.net",
     )
 
     /**
@@ -53,6 +55,22 @@ object BgmEchPolicy {
         val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
         return scope.any { domain -> host == domain || host.endsWith(".$domain") }
     }
+
+    /**
+     * 启动预热用的主机：App 起来后马上会请求的那几个。
+     * 冷启动时把地址与 ECH 配置先取回来，避免用户第一屏等两次 DoH 往返。
+     */
+    private val warmUpHosts = listOf(
+        "bgm.tv",
+        "api.bgm.tv",
+        "next.bgm.tv",
+        "xget.xiaoyv.com.cn",
+        "www.pixiv.net",
+        "app-api.pixiv.net",
+        "i.pximg.net",
+    )
+
+    fun warmUpHosts(): List<String> = warmUpHosts
 
     /** 供注入脚本使用：与 [isProtected] 同一份域名清单，避免两边各写一份。 */
     fun scriptDomains(): String = domains.sorted().joinToString(",", "[", "]") { "'$it'" }

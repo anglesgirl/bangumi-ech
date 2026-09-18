@@ -20,6 +20,16 @@ https://网关域名/dns-query|IP|IP,https://备用网关/dns-query|IP
   收到响应后不重发请求，DoH 查询自身仍然不重试。
 - 单次 DoH 失败会写入 5 分钟冷却（持久化，重启不绕过），期间受保护域名不可用——这是 fail-closed 的设计代价。
 
+## 速度相关的三处设计与踩坑
+
+- **DoH 按主机加锁**：缓存与锁都按主机粒度（`ConcurrentHashMap` + `lockFor(host)`）。
+  早期用对象级 `@Synchronized`，一屏图片会一个个排队等取地址，是"加载慢"的主因之一。
+- **冷启动预热**：`BgmEchDoh.warmUp(...)` 在首个 OkHttp 客户端构建时并发取回常用主机的地址与
+  ECH 配置（`BgmEchPolicy.warmUpHosts()`），把两次 DoH 往返从用户第一屏的关键路径上挪走；
+  预热失败**不写冷却**，否则一次网关抖动会被放大成 5 分钟整体不可用。
+- **A 记录优先、`ipv4hint` 兜底**：网关的 A 记录是用户按国内实测优选过的地址，要优先；
+  ECH 记录里的 hint 常是另一组地址，只作兜底候选。两者不同时不能只取 hint。
+
 ## 正式包（release）
 
 - CI 同时产出 `assembleDebug` 与 `assembleRelease`，两个包都放进私有 Release（`ech-<run_id>`）。

@@ -24,6 +24,10 @@ checks = {
         and 'original.dns.lookup(hostname)' in transport,
     'A 记录优先、ECH hint 兜底': 'val preferred = BgmEchDoh.resolve(hostname)' in transport
         and '(preferred + hinted).distinct()' in transport,
+    'DoH 按主机加锁（不全局串行）': 'synchronized(lockFor(host))' in doh
+        and 'ConcurrentHashMap<String, Any>()' in doh,
+    '冷启动预热且失败不进冷却': 'fun warmUp(' in doh and 'DoH 预热失败' in doh
+        and 'BgmEchDoh.warmUp(BgmEchPolicy.warmUpHosts())' in transport,
     'hint 取自 ECH 记录': 'ipv4hint=([0-9.,]+)' in doh and 'hints[host] = Entry(parseHints(' in doh,
     '拒绝明文 HTTP': 'requireHttps(chain.request())' in transport,
     '候选地址按序回退且 DoH 不重试': 'retryOnConnectionFailure(true)' in transport
