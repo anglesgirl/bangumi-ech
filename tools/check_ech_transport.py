@@ -49,8 +49,8 @@ checks = {
     # 手写/注入的记录过期后再拉还是旧的（实测：连它自己的 zone 都握手不过），
     # 所以配置一律先取 CF 官方 ECH 域名 cloudflare-ech.com 的实时值。
     '配置首选 CF 官方 ECH 域名的实时值': 'REFERENCE_ECH_HOST = "cloudflare-ech.com"' in doh
-        and 'fetchConfigFromGateway(REFERENCE_ECH_HOST, bestEffort)' in doh
-        and 'adoptConfig(host, reference)' in doh,
+        and 'val first = if (ownRecordFirst(host)) host else REFERENCE_ECH_HOST' in doh
+        and 'adoptConfig(host, config)' in doh,
     '被拒后翻成用该域名自己的记录': 'markOwnRecordFirst' in transport and 'ownfirst:' in doh,
     '失效时连官方缓存一起丢': 'configs.remove(REFERENCE_ECH_HOST)' in doh,
     '握手失败丢缓存并用在线配置重试一次': 'invalidateConfig(request.url.host)' in transport

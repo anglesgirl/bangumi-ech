@@ -298,19 +298,16 @@ internal object BgmEchDoh {
      * 拿不到或被翻过标志位时才用它自己的记录。两条路的结果都会落到该域名名下缓存起来。
      */
     private fun fetchConfig(host: String, bestEffort: Boolean): ByteArray {
-        if (host != REFERENCE_ECH_HOST && !ownRecordFirst(host)) {
-            val reference = runCatching { fetchConfigFromGateway(REFERENCE_ECH_HOST, bestEffort) }.getOrNull()
-            if (reference != null) return adoptConfig(host, reference)
+        if (host == REFERENCE_ECH_HOST) return fetchConfigFromGateway(host, bestEffort)
+        // 先走哪条路：默认官方源；翻过标志位（官方那份被拒过）就先用它自己的记录。
+        val first = if (ownRecordFirst(host)) host else REFERENCE_ECH_HOST
+        val second = if (ownRecordFirst(host)) REFERENCE_ECH_HOST else host
+        runCatching { fetchConfigFromGateway(first, bestEffort) }.getOrNull()?.let { config ->
+            return if (first == host) config else adoptConfig(host, config)
         }
-        return try {
-            fetchConfigFromGateway(host, bestEffort)
-        } catch (error: Exception) {
-            if (host == REFERENCE_ECH_HOST || ownRecordFirst(host)) throw error
-            // 自己的记录也没有（注入表缺项之类）：官方那份仍然可用。
-            val reference = runCatching { fetchConfigFromGateway(REFERENCE_ECH_HOST, bestEffort) }.getOrNull()
-                ?: throw error
-            adoptConfig(host, reference)
-        }
+        // 第一条路拿不到：换另一条；两条都不行才如实抛错（fail-closed）。
+        val fallback = runCatching { fetchConfigFromGateway(second, bestEffort) }.getOrThrow()
+        return if (second == host) fallback else adoptConfig(host, fallback)
     }
 
     /** 把官方源的配置记为**该域名**的配置（连 hints 一起），这样冷启动直接有缓存可用。 */
