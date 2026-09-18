@@ -18,6 +18,20 @@ import java.io.File
  * H3 熔断：某图片 URL 的 H3 失败（多半是这条线路限速/封了 UDP）后，短期直接走 TCP，
  * 避免每张图都白等一次握手超时。
  */
+/** 从文件头判断图片类型：Coil 靠它挑解码器（AVIF 尤其依赖） */
+private fun mimeOf(f: File): String? = runCatching {
+    val b = ByteArray(12)
+    java.io.FileInputStream(f).use { it.read(b) }
+    when {
+        b[0] == 0xFF.toByte() && b[1] == 0xD8.toByte() -> "image/jpeg"
+        b[0] == 0x89.toByte() && b[1] == 0x50.toByte() -> "image/png"
+        b[0] == 0x47.toByte() && b[1] == 0x49.toByte() -> "image/gif"
+        String(b, 0, 4) == "RIFF" -> "image/webp"
+        String(b, 4, 4) == "ftyp" -> "image/avif"
+        else -> null
+    }
+}.getOrNull()
+
 private object H3Breaker {
     // 线路抖动（尤其移动走香港）常常"单张断、刷新就好"，所以：
     // 连续 2 次失败才熔断，且只停 60 秒 —— 别把一次抖动放大成 5 分钟不走 H3。
@@ -58,7 +72,7 @@ internal class H3ImageFetcher(
                     source = FileSystem.SYSTEM.source(hit.absoluteFile.toOkioPath()).buffer(),
                     fileSystem = FileSystem.SYSTEM,
                 ),
-                mimeType = null,
+                mimeType = mimeOf(hit),
                 dataSource = DataSource.NETWORK,
             )
         }

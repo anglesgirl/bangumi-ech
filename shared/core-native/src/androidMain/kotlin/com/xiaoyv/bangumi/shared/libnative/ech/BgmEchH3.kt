@@ -98,7 +98,13 @@ object BgmEchH3 {
      * 只接管 pixiv 官方图床：其它图源（如 AnimePic）对请求头敏感，
      * 走 H3 可能拿到 200 + 非图片内容，Coil 解不出 → 黑屏。宁可不接管。
      */
-    private val H3_HOSTS = listOf("i.pximg.net")
+    /** 防盗链 Referer：只有确实要求的站点才加（site 后缀 → Referer） */
+    private val REFERERS = listOf(
+        "pximg.net" to "https://www.pixiv.net/",
+    )
+
+    private fun refererFor(host: String): String? =
+        REFERERS.firstOrNull { host == it.first || host.endsWith("." + it.first) }?.second
 
     /** 图片魔数校验：不是图片一律判失败（回落原链路），绝不把 HTML/拦截页交给解码器。 */
     private fun looksLikeImage(f: File): Boolean {
@@ -156,7 +162,7 @@ object BgmEchH3 {
             return null
         }
         val host = uri.host ?: return null
-        if (!H3_HOSTS.any { host == it || host.endsWith(".$it") }) return null
+        if (!BgmEchPolicy.isProtected(host)) return null
         val ip = runCatching { BgmEchDoh.resolve(host).firstOrNull()?.hostAddress }.getOrNull()
             ?: run { report(host, "DoH 未解析出 IP"); return null }
         val ech = runCatching { BgmEchDoh.echConfig(host) }.getOrNull()
@@ -164,8 +170,12 @@ object BgmEchH3 {
             append(uri.rawPath ?: "/")
             uri.rawQuery?.let { append('?').append(it) }
         }
-        val referer = if (host.endsWith("pximg.net")) "https://www.pixiv.net/" else null
-        val out = File(context.cacheDir, "h3-" + System.nanoTime() + ".bin")
+        val referer = refererFor(host)
+        // 必须保留原扩展名：AnimePic 缩略图是 .avif，之前统一叫 .bin 会让 Coil 挑不出解码器 → 黑屏
+        val ext = (uri.rawPath ?: "").substringAfterLast('.', "").take(5)
+            .filter { it.isLetterOrDigit() }
+            .ifEmpty { "bin" }
+        val out = File(context.cacheDir, "h3-" + System.nanoTime() + "." + ext)
         val ok = fetchToFile(context, host, ip, ech, pathWithQuery, referer, out)
         if (ok == null) {
             report(host, "H3 未取回（ech=" + (ech?.size ?: 0) + "B, ip=" + ip + "）")
