@@ -21,6 +21,9 @@ object BgmEchPolicy {
         return domains.any { domain -> host == domain || host.endsWith(".$domain") }
     }
 
+    /** 供注入脚本使用：与 [isProtected] 同一份域名清单，避免两边各写一份。 */
+    fun scriptDomains(): String = domains.sorted().joinToString(",", "[", "]") { "'$it'" }
+
     private val policy = object : NetworkSecurityPolicy {
         override fun isCertificateTransparencyVerificationRequired(hostname: String): Boolean = false
 

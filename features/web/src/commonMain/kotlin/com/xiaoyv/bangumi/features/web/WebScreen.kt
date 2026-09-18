@@ -24,9 +24,10 @@ import com.multiplatform.webview.web.LoadingState
 import com.multiplatform.webview.web.WebView
 import com.multiplatform.webview.web.WebViewNavigator
 import com.multiplatform.webview.web.WebViewState
-import com.multiplatform.webview.web.defaultWebViewFactory
 import com.multiplatform.webview.web.rememberSaveableWebViewState
 import com.multiplatform.webview.web.rememberWebViewNavigator
+import com.xiaoyv.bangumi.shared.libnative.component.echWebViewFactory
+import com.xiaoyv.bangumi.shared.libnative.component.rememberEchWebViewParams
 import com.xiaoyv.bangumi.core_resource.resources.Res
 import com.xiaoyv.bangumi.core_resource.resources.global_loading
 import com.xiaoyv.bangumi.features.web.business.WebEvent
@@ -169,7 +170,8 @@ private fun WebScreenContent(
                 captureBackPresses = false,
                 state = webState,
                 navigator = navigator,
-                factory = { defaultWebViewFactory(it) }
+                platformWebViewParams = rememberEchWebViewParams(),
+                factory = ::echWebViewFactory
             )
 
             val loadingState = webState.loadingState

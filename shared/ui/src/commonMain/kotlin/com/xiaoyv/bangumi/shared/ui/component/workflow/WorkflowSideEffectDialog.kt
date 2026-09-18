@@ -59,6 +59,8 @@ import com.multiplatform.webview.web.LoadingState
 import com.multiplatform.webview.web.WebView
 import com.multiplatform.webview.web.rememberWebViewNavigator
 import com.multiplatform.webview.web.rememberWebViewState
+import com.xiaoyv.bangumi.shared.libnative.component.echWebViewFactory
+import com.xiaoyv.bangumi.shared.libnative.component.rememberEchWebViewParams
 import com.xiaoyv.bangumi.core_resource.resources.Res
 import com.xiaoyv.bangumi.core_resource.resources.global_cancel
 import com.xiaoyv.bangumi.core_resource.resources.global_confirm
@@ -445,7 +447,9 @@ fun WorkflowSyncCookieBottomSheetDialog(
                     modifier = Modifier.fillMaxSize(),
                     state = state,
                     captureBackPresses = false,
-                    navigator = navigator
+                    navigator = navigator,
+                    platformWebViewParams = rememberEchWebViewParams(),
+                    factory = ::echWebViewFactory
                 )
 
                 val loadingState = state.loadingState

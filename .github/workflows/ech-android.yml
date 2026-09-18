@@ -43,7 +43,11 @@ jobs:
         run: |
           python3 tools/check_ech_policy.py
           python3 tools/check_ech_transport.py
+          python3 tools/check_ech_webview.py
           python3 tools/check_firebase_config.py
+          python3 tools/extract_webview_bridge.py /tmp/bgm-ech-bridge.js
+          node --check /tmp/bgm-ech-bridge.js
+          node tools/webview_bridge_test.js /tmp/bgm-ech-bridge.js
       - name: 构建调试包
         env:
           ECH_DOH_POOL: ${{ secrets.ECH_DOH_POOL }}

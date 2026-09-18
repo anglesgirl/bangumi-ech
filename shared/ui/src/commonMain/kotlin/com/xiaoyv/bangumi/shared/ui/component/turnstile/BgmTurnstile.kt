@@ -21,6 +21,8 @@ import com.multiplatform.webview.web.WebView
 import com.multiplatform.webview.web.WebViewNavigator
 import com.multiplatform.webview.web.rememberWebViewNavigator
 import com.multiplatform.webview.web.rememberWebViewState
+import com.xiaoyv.bangumi.shared.libnative.component.echWebViewFactory
+import com.xiaoyv.bangumi.shared.libnative.component.rememberEchWebViewParams
 import com.xiaoyv.bangumi.core_resource.resources.Res
 import com.xiaoyv.bangumi.core_resource.resources.global_turnstile
 import com.xiaoyv.bangumi.shared.core.utils.debugLog
@@ -96,6 +98,8 @@ fun BgmTurnstile(
                         .height(90.dp),
                     state = webViewState,
                     navigator = webViewNavigator,
+                    platformWebViewParams = rememberEchWebViewParams(),
+                    factory = ::echWebViewFactory,
                 )
             }
         }
