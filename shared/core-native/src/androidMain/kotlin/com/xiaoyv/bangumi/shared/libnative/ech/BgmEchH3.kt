@@ -99,6 +99,9 @@ object BgmEchH3 {
      * 走 H3 可能拿到 200 + 非图片内容，Coil 解不出 → 黑屏。宁可不接管。
      */
     /** 防盗链 Referer：只有确实要求的站点才加（site 后缀 → Referer） */
+    /** H3 只接管的图床（见 fetchImageToFile 里的实测依据） */
+    private val H3_HOSTS = listOf("i.pximg.net")
+
     private val REFERERS = listOf(
         "pximg.net" to "https://www.pixiv.net/",
     )
@@ -162,7 +165,11 @@ object BgmEchH3 {
             return null
         }
         val host = uri.host ?: return null
-        if (!BgmEchPolicy.isProtected(host)) return null
+        // 只接管 pixiv 官方图床。实测依据（今天逐条复现）：
+        //   AnimePic CDN 自身拦非浏览器请求 → 403 拦截页 / 302（用真实 IP 直连同样如此）
+        //   lain.bgm.tv 在 CF 侧未启用 H3 → 握手 alert 40
+        // 这两类走 H3 只会白试一次，交给原链路（自带 UA/Accept/Referer）更稳。
+        if (!H3_HOSTS.any { host == it || host.endsWith(".$it") }) return null
         val ip = runCatching { BgmEchDoh.resolve(host).firstOrNull()?.hostAddress }.getOrNull()
             ?: run { report(host, "DoH 未解析出 IP"); return null }
         val ech = runCatching { BgmEchDoh.echConfig(host) }.getOrNull()
