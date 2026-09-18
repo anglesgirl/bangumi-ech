@@ -42,11 +42,13 @@ internal object BgmEchTransport {
         builder.dns(object : Dns {
             override fun lookup(hostname: String): List<InetAddress> {
                 if (BgmEchPolicy.isProtected(hostname)) {
-                    // 网关给出的 A 记录优先（用户按国内实测优选过），ECH 记录里的 ipv4hint 作为兜底；
-                    // 连接层按序回退，避免单个地址不可达就整站失败。
+                    // 默认：网关给出的 A 记录优先（用户按国内实测优选过），ECH 记录里的 ipv4hint 兜底。
+                    // 若这个地址曾经拒绝过本 zone 的 ECH（服务器拒绝 → 握手失败），
+                    // 则改用 ipv4hint 优先——那是 CF 为 ECH 推荐的地址。连接层仍按序回退。
                     val preferred = BgmEchDoh.resolve(hostname)
                     val hinted = runCatching { BgmEchDoh.hints(hostname) }.getOrDefault(emptyList())
-                    return (preferred + hinted).distinct()
+                    val ordered = if (BgmEchDoh.preferHints(hostname)) hinted + preferred else preferred + hinted
+                    return ordered.distinct()
                 }
                 // 只换地址的域名（无 ECH 记录）：固定地址优先，其次网关 DoH，最后系统解析。
                 if (BgmEchPolicy.isDohOnly(hostname)) {
@@ -87,11 +89,16 @@ internal object BgmEchTransport {
             val request = chain.request()
             try {
                 chain.proceed(request)
-            } catch (error: SSLException) {
+            } catch (error: IOException) {
                 if (!BgmEchPolicy.isProtected(request.url.host)) throw error
-                // 冷启动优先用的是落盘缓存：握手失败说明配置已过期。
-                // 丢掉缓存再走一次，这次会取在线配置；仍失败就如实抛错（fail-closed，不回落明文）。
+                // Conscrypt 把 ECH 被拒报成 SSLException，但有些机型/版本会包成普通 IOException，
+                // 所以按"是否是 TLS 层失败"判断，别把普通断网也当成配置问题重试。
+                if (!error.isTlsFailure()) throw error
+                // 两种可能：缓存里的配置已过期（CF 约 5 小时轮换），或这个地址不接受本 zone 的配置。
+                // 丢掉配置、并记住下次优先用 ECH 记录里的地址，然后重试一次；
+                // 仍失败就如实抛错（fail-closed，不回落明文）。
                 BgmEchDoh.invalidateConfig(request.url.host)
+                BgmEchDoh.markPreferHints(request.url.host)
                 chain.proceed(request)
             }
         })
@@ -100,6 +107,18 @@ internal object BgmEchTransport {
             requireHttps(chain.request())
             chain.proceed(chain.request())
         })
+    }
+
+    /** 失败是否来自 TLS 层（含 ECH 被拒、配置过期、协议错误）。 */
+    private fun Throwable.isTlsFailure(): Boolean {
+        var current: Throwable? = this
+        while (current != null) {
+            if (current is SSLException) return true
+            val text = current.message.orEmpty()
+            if (text.contains("SSL") || text.contains("ssl=") || text.contains("ECH")) return true
+            current = current.cause
+        }
+        return false
     }
 
     internal fun requireHttps(request: Request) {

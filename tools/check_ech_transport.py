@@ -23,8 +23,8 @@ checks = {
     '使用带策略的信任管理器': 'BgmEchPolicy.PolicyTrustManager' in transport,
     '保护域名不使用系统 DNS': 'BgmEchDoh.resolve(hostname)' in transport
         and 'original.dns.lookup(hostname)' in transport,
-    'A 记录优先、ECH hint 兜底': 'val preferred = BgmEchDoh.resolve(hostname)' in transport
-        and '(preferred + hinted).distinct()' in transport,
+    '默认 A 记录优先、ECH hint 兜底': 'val preferred = BgmEchDoh.resolve(hostname)' in transport
+        and 'hinted + preferred else preferred + hinted' in transport,
     'DoH 按主机加锁（不全局串行）': 'synchronized(lockFor(host))' in doh
         and 'ConcurrentHashMap<String, Any>()' in doh,
     '冷启动预热且失败不进冷却': 'fun warmUp(' in doh and 'DoH 预热失败' in doh
@@ -38,14 +38,22 @@ checks = {
     '缓存值后台刷新且不写冷却': 'refreshLater(host)' in doh
         and 'fetchAddresses(host, bestEffort = true)' in doh
         and 'fetchConfig(host, bestEffort = true)' in doh,
-    '缓存有过期上限': 'CACHED_MAX_AGE_MILLIS' in doh and '24 * 60 * 60 * 1000L' in doh,
+    # ECH 配置按 CF 的轮换周期（约 5 小时）失效，不能拿 24 小时前的配置去握手；
+    # 地址不参与密钥轮换，可以留久一点。
+    'ECH 配置按其轮换周期失效': 'CACHED_CONFIG_MAX_AGE_MILLIS' in doh and '4 * 60 * 60 * 1000L' in doh,
+    '地址与配置分开设有效期': 'CACHED_ADDRESS_MAX_AGE_MILLIS' in doh and '24 * 60 * 60 * 1000L' in doh,
+    'hints 与配置同源同有效期': 'persisted("hint:$host", CACHED_CONFIG_MAX_AGE_MILLIS)' in doh,
+    '服务器拒绝后优先用 ECH 记录里的地址': 'markPreferHints' in transport
+        and 'BgmEchDoh.preferHints(hostname)' in transport
+        and 'hintfirst:' in doh,
+    '地址顺序按标志位切换': 'hinted + preferred else preferred + hinted' in transport,
     '握手失败丢缓存并用在线配置重试一次': 'invalidateConfig(request.url.host)' in transport
-        and 'catch (error: SSLException)' in transport
+        and 'isTlsFailure()' in transport
         and 'chain.proceed(request)' in transport,
     'DoH 失败先换端点重试再冷却': 'rotateEndpoint()' in doh and 'RETRY_DELAY_MILLIS' in doh
         and '已阻断并冷却 5 分钟' in doh,
     '最近成功的地址可兜底且有有效期': 'persistedAddresses(host)' in doh
-        and 'CACHED_MAX_AGE_MILLIS' in doh,
+        and 'CACHED_ADDRESS_MAX_AGE_MILLIS' in doh,
     '最近成功的 ECH 配置可兜底': 'persistedConfig(host)' in doh
         and 'Base64.encodeToString(result' in doh,
     'hint 取自 ECH 记录且会落盘': 'ipv4hint=([0-9.,]+)' in doh

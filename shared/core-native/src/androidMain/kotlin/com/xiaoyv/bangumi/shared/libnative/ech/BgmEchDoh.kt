@@ -30,10 +30,13 @@ private val HINT_PATTERN = Regex("ipv4hint=([0-9.,]+)")
 private const val RETRY_DELAY_MILLIS = 400L
 
 /**
- * 落盘的"上次成功结果"可以直接拿来开路的时长。
- * 冷启动先用它，不再等 DoH；库里的 ECH 配置最坏也就是握手失败，不会让 SNI 明文外泄。
+ * ECH 配置的有效期。CF 侧大约 5 小时轮换密钥，过期就必须重取（浏览器也是这么做的），
+ * 所以这里留出余量按 4 小时算——过期的配置只会被服务器拒绝（握手失败），不会让 SNI 明文外泄。
  */
-private const val CACHED_MAX_AGE_MILLIS = 24 * 60 * 60 * 1000L
+private const val CACHED_CONFIG_MAX_AGE_MILLIS = 4 * 60 * 60 * 1000L
+
+/** 地址不参与密钥轮换，可以留久一点。 */
+private const val CACHED_ADDRESS_MAX_AGE_MILLIS = 24 * 60 * 60 * 1000L
 
 /** 用缓存开路时在内存里的占位时长；后台拿到在线数据就覆盖它。 */
 private const val CACHED_HOLD_MILLIS = 15 * 60 * 1000L
@@ -118,7 +121,21 @@ internal object BgmEchDoh {
     }
 
     /**
-     * 丢掉某主机的 **ECH 配置与 hints**（内存 + 落盘）。用于"缓存里的配置已过期、握手失败"。
+     * 该主机是否"优先使用 ECH 记录里的地址"。
+     * A 记录的地址（含优选 IP）如果不接受本 zone 的 ECH 配置，就会被服务器拒绝；
+     * 这种情况下改用 HTTPS 记录里的 ipv4hint（CF 为 ECH 推荐的地址）。
+     */
+    fun preferHints(hostname: String): Boolean =
+        preferences.getBoolean("hintfirst:${hostname.lowercase(Locale.ROOT).trimEnd('.')}", false)
+
+    fun markPreferHints(hostname: String) {
+        val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
+        if (preferHints(host)) return
+        preferences.edit().putBoolean("hintfirst:$host", true).commit()
+    }
+
+    /**
+     * 丢掉某主机的 **ECH 配置与 hints**（内存 + 落盘）。用于"缓存里的配置已过期或不被接受"。
      * 地址保留：重试时还能直接复用，只有配置这一步需要重新取在线数据。
      */
     fun invalidateConfig(hostname: String) {
@@ -323,24 +340,26 @@ internal object BgmEchDoh {
         preferences.edit().putString(key, value).putLong("$key.at", now()).apply()
     }
 
-    private fun persisted(key: String): String? {
+    private fun persisted(key: String, maxAgeMillis: Long): String? {
         val at = preferences.getLong("$key.at", 0)
-        if (at <= 0 || now() - at > CACHED_MAX_AGE_MILLIS) return null
+        if (at <= 0 || now() - at > maxAgeMillis) return null
         return preferences.getString(key, null)
     }
 
     private fun persistedAddresses(host: String): List<InetAddress>? =
-        persisted("addr:$host")?.split(',')?.mapNotNull {
+        persisted("addr:$host", CACHED_ADDRESS_MAX_AGE_MILLIS)?.split(',')?.mapNotNull {
             runCatching { parseIpv4Literal(it.trim()) }.getOrNull()
         }?.takeIf { it.isNotEmpty() }
 
+    /** hints 与 ECH 配置同源（都来自 HTTPS 记录），因此跟配置同一个有效期。 */
     private fun persistedHints(host: String): List<InetAddress>? =
-        persisted("hint:$host")?.split(',')?.mapNotNull {
+        persisted("hint:$host", CACHED_CONFIG_MAX_AGE_MILLIS)?.split(',')?.mapNotNull {
             runCatching { parseIpv4Literal(it.trim()) }.getOrNull()
         }?.takeIf { it.isNotEmpty() }
 
     private fun persistedConfig(host: String): ByteArray? =
-        persisted("cfg:$host")?.let { runCatching { Base64.decode(it, Base64.DEFAULT) }.getOrNull() }
+        persisted("cfg:$host", CACHED_CONFIG_MAX_AGE_MILLIS)
+            ?.let { runCatching { Base64.decode(it, Base64.DEFAULT) }.getOrNull() }
             ?.takeIf { runCatching { validateConfig(it) }.isSuccess }
 
     internal fun parseIpv4Literal(value: String): InetAddress {
