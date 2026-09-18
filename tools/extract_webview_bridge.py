@@ -29,11 +29,17 @@ def main() -> int:
         return 1
 
     policy = POLICY.read_text()
-    domains = re.search(r'private val domains = setOf\(([^)]*)\)', policy)
-    if not domains:
+    block = re.search(r'private val domains = setOf\((.*?)\)\n', policy, re.S)
+    if not block:
         print('找不到受保护域名清单', file=sys.stderr)
         return 1
-    listed = ','.join(f"'{item.strip().strip(chr(34))}'" for item in domains.group(1).split(','))
+    # 清单里可能有注释，先去注释再取域名，否则会把注释拼进 JS 造成语法错误。
+    body = re.sub(r'//[^\n]*', '', block.group(1))
+    items = re.findall(r'"([^"]+)"', body)
+    if not items:
+        print('受保护域名清单为空', file=sys.stderr)
+        return 1
+    listed = ','.join(f"'{item}'" for item in items)
     script = script.replace('__PROTECTED__', '[' + listed + ']')
     script = script.replace('__BRIDGE_NAME__', 'bgmEchBridge')
     script = script.replace('__CALLBACK__', '__bgmEchResolve')

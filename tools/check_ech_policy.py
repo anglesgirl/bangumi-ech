@@ -18,6 +18,8 @@ checks = {
     'R8 保留反射策略入口': '-keep class com.xiaoyv.bangumi.shared.libnative.ech.BgmEchPolicy$PolicyTrustManager { *; }' in rules,
     '源码未嵌入私有网关': not re.search(r'https?://', text),
     'Pixiv 全系纳入 ECH 强制范围': '"pixiv.net", "pximg.net"' in text,
+    '自建图床代理纳入 ECH 范围': '"xget.xiaoyv.com.cn"' in text,
+    '无 ECH 的图床域名只换地址': '"i.pixiv.re"' in text and 'dohOnlyDomains' in text,
     '仅换地址的域名不要求 ECH': 'isDohOnly' in text
         and 'if (isProtected(hostname)) DomainEncryptionMode.REQUIRED' in text,
     '仅换地址的域名有实测固定 IP': '"104.18.40.152"' in text and '"172.64.147.104"' in text,

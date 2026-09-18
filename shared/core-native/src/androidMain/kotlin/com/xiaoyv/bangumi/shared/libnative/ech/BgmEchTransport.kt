@@ -39,7 +39,12 @@ internal object BgmEchTransport {
         // 受保护域名的地址只来自网关 DoH，绝不回落到会给出污染结果的系统解析。
         builder.dns(object : Dns {
             override fun lookup(hostname: String): List<InetAddress> {
-                if (BgmEchPolicy.isProtected(hostname)) return BgmEchDoh.resolve(hostname)
+                if (BgmEchPolicy.isProtected(hostname)) {
+                    // ECH 记录自带的 ipv4hint 优先（CF 为配合 ECH 发布，常与 A 记录不同），
+                    // 再补上 A 记录地址；连接层按序回退，避免单个地址不可达就整站失败。
+                    val hinted = runCatching { BgmEchDoh.hints(hostname) }.getOrDefault(emptyList())
+                    return (hinted + BgmEchDoh.resolve(hostname)).distinct()
+                }
                 // 只换地址的域名（无 ECH 记录）：固定地址优先，其次网关 DoH，最后系统解析。
                 if (BgmEchPolicy.isDohOnly(hostname)) {
                     val pinned = BgmEchPolicy.pinnedAddresses(hostname).mapNotNull { value ->

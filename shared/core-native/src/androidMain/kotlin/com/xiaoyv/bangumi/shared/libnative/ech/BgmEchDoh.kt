@@ -16,12 +16,16 @@ import java.util.concurrent.TimeUnit
  * 从构建注入的网关获取 DNS 与 ECH 配置。空配置和解析失败均阻断。
  * 串行合并缓存请求；失败冷却写入私有存储，重启不绕过，无自动重试。
  */
+private val HINT_PATTERN = Regex("ipv4hint=([0-9.,]+)")
+
 internal object BgmEchDoh {
     private data class Entry<T>(val value: T, val until: Long)
 
     /** 网关条目：URL 与其自带地址。受污染的网络里不能用系统 DNS 解析网关域名。 */
     private data class Endpoint(val url: HttpUrl, val addresses: List<InetAddress>)
     private val addresses = mutableMapOf<String, Entry<List<InetAddress>>>()
+    /** ECH 记录里的 ipv4hint：CF 建议配合 ECH 使用的地址，常与 A 记录不是同一组。 */
+    private val hints = mutableMapOf<String, Entry<List<InetAddress>>>()
     private val configs = mutableMapOf<String, Entry<ByteArray>>()
     private val preferences by lazy { application.getSharedPreferences("ech_doh_state", 0) }
     /**
@@ -79,6 +83,15 @@ internal object BgmEchDoh {
         }
     }
 
+    /** ECH 记录里的 hint 地址；取配置失败时抛错（与 ECH 同样的 fail-closed 语义）。 */
+    @Synchronized
+    fun hints(hostname: String): List<InetAddress> {
+        val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
+        hints[host]?.let { if (it.until > java.lang.System.currentTimeMillis()) return it.value }
+        echConfig(host)
+        return hints[host]?.value.orEmpty()
+    }
+
     @Synchronized
     fun echConfig(hostname: String): ByteArray {
         val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
@@ -98,6 +111,7 @@ internal object BgmEchDoh {
                 validateConfig(wire)
                 selected = wire
                 ttl = item.getLong("TTL").coerceIn(0, 300)
+                hints[host] = Entry(parseHints(item.getString("data")), java.lang.System.currentTimeMillis() + ttl * 1000)
                 break
             }
             val result = selected ?: throw IOException("网关未提供 ECH 配置，已阻断")
@@ -158,6 +172,12 @@ internal object BgmEchDoh {
         }.toByteArray()
         return InetAddress.getByAddress(bytes)
     }
+
+    private fun parseHints(data: String): List<InetAddress> =
+        HINT_PATTERN.find(data)?.groupValues?.get(1)
+            ?.split(',')
+            ?.mapNotNull { value -> runCatching { parseIpv4Literal(value.trim()) }.getOrNull() }
+            .orEmpty()
 
     internal fun validateConfig(wire: ByteArray) {
         if (wire.size < 8) throw IOException("ECH 配置过短")

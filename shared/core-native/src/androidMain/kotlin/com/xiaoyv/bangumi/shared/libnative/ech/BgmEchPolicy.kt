@@ -15,13 +15,22 @@ import javax.net.ssl.X509TrustManager
  */
 object BgmEchPolicy {
     /** 网关已发布 ECH 记录、必须走加密通道的域名。 */
-    private val domains = setOf("bgm.tv", "bangumi.tv", "chii.in", "pixiv.net", "pximg.net")
+    private val domains = setOf(
+        "bgm.tv", "bangumi.tv", "chii.in",
+        "pixiv.net", "pximg.net",
+        // 作者自建图床代理：同样在 CF 上并发布了 ECH 记录。
+        "xget.xiaoyv.com.cn",
+    )
 
     /**
      * 没有 ECH 记录、但地址会被污染的域名：只替换解析地址，**不动 TLS**（保持浏览器自身指纹）。
      * 人机验证类站点对 TLS 指纹敏感，所以这类域名不进 ECH 通道，只帮它换 IP。
      */
-    private val dohOnlyDomains = setOf("challenges.cloudflare.com")
+    private val dohOnlyDomains = setOf(
+        "challenges.cloudflare.com",
+        // 第三方图床：CF 上但没开 ECH，只帮它换掉污染地址。
+        "i.pixiv.re",
+    )
 
     /**
      * 只换地址的域名的首选地址：CF 边缘 IP，国内可达性由用户实测选定。

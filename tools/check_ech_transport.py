@@ -20,8 +20,11 @@ checks = {
         and not (native / 'sni/AntiSniTlsEngine.kt').exists(),
     '握手前注入真实配置': 'Conscrypt.setEchConfigList(socket, config)' in transport,
     '使用带策略的信任管理器': 'BgmEchPolicy.PolicyTrustManager' in transport,
-    '保护域名不使用系统 DNS': 'return BgmEchDoh.resolve(hostname)' in transport
+    '保护域名不使用系统 DNS': 'BgmEchDoh.resolve(hostname)' in transport
         and 'original.dns.lookup(hostname)' in transport,
+    'ECH hint 与 A 记录都作为候选': 'BgmEchDoh.hints(hostname)' in transport
+        and 'hinted + BgmEchDoh.resolve' in transport,
+    'hint 取自 ECH 记录': 'ipv4hint=([0-9.,]+)' in doh and 'hints[host] = Entry(parseHints(' in doh,
     '拒绝明文 HTTP': 'requireHttps(chain.request())' in transport,
     '候选地址按序回退且 DoH 不重试': 'retryOnConnectionFailure(true)' in transport
         and 'retryOnConnectionFailure(false)' in doh,
