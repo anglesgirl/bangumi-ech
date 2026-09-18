@@ -40,10 +40,11 @@ internal object BgmEchTransport {
         builder.dns(object : Dns {
             override fun lookup(hostname: String): List<InetAddress> {
                 if (BgmEchPolicy.isProtected(hostname)) {
-                    // ECH 记录自带的 ipv4hint 优先（CF 为配合 ECH 发布，常与 A 记录不同），
-                    // 再补上 A 记录地址；连接层按序回退，避免单个地址不可达就整站失败。
+                    // 网关给出的 A 记录优先（用户按国内实测优选过），ECH 记录里的 ipv4hint 作为兜底；
+                    // 连接层按序回退，避免单个地址不可达就整站失败。
+                    val preferred = BgmEchDoh.resolve(hostname)
                     val hinted = runCatching { BgmEchDoh.hints(hostname) }.getOrDefault(emptyList())
-                    return (hinted + BgmEchDoh.resolve(hostname)).distinct()
+                    return (preferred + hinted).distinct()
                 }
                 // 只换地址的域名（无 ECH 记录）：固定地址优先，其次网关 DoH，最后系统解析。
                 if (BgmEchPolicy.isDohOnly(hostname)) {
