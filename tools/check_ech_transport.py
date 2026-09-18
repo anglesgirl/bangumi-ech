@@ -27,6 +27,7 @@ checks = {
         and 'retryOnConnectionFailure(false)' in doh,
     '网关自带 IP 且禁止系统解析': 'ECH 网关缺少自有 IP' in doh and 'Dns.SYSTEM' not in doh,
     '网关池通过资源读取': '"ech_doh_pool"' in doh,
+    '资源压缩保留网关资源': 'tools:keep="@string/ech_doh_pool"' in read(root / 'android/src/main/res/raw/keep.xml'),
     '失败冷却持久化': 'putLong("blocked_until",' in doh and '300_000L' in doh,
     '无写死 ECH 配置': 'Base64.decode' in doh and 'fetch(pool, host, "HTTPS")' in doh,
     'IP 响应先校验再解析': 'parseIpv4Literal' in doh and 'InetAddress.getByAddress' in doh,

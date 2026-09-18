@@ -61,6 +61,21 @@ jobs:
           result=${PIPESTATUS[0]}
           { free -h; df -h .; } >> runner-resources.log
           exit "$result"
+      - name: 校验正式包内含网关资源
+        env:
+          ECH_DOH_POOL: ${{ secrets.ECH_DOH_POOL }}
+        run: |
+          python3 - <<'PY'
+          import os, zipfile, pathlib
+          from urllib.parse import urlparse
+          apks = sorted(pathlib.Path('android/build/outputs/apk/release').glob('*arm64-v8a*.apk'))
+          assert apks, '缺少正式包'
+          text = zipfile.ZipFile(apks[0]).read('resources.arsc').decode('utf-8', errors='ignore')
+          assert 'ech_doh_pool' in text, '资源压缩删掉了网关资源，正式包会阻断全部受保护域名'
+          host = urlparse(os.environ['ECH_DOH_POOL'].split(',')[0].split('|')[0]).hostname
+          assert host in text, '正式包里没注入网关地址'
+          print('正式包网关资源校验通过：', host)
+          PY
       - name: 保存诊断日志
         if: always()
         continue-on-error: true

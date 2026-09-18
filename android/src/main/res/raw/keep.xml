@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  网关地址在运行时按名称读取（resources.getIdentifier），R8 的资源压缩会误判为未使用而删除，
+  正式包一旦删掉就会静默阻断所有受保护域名，因此必须显式保留。
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@string/ech_doh_pool" />
