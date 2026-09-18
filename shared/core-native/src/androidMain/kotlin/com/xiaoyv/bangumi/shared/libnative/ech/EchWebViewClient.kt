@@ -51,9 +51,9 @@ internal class EchWebViewClient : AccompanistWebViewClient() {
         }
     }
 
-    override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+    override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
         super.onPageStarted(view, url, favicon)
-        view?.let { EchWebBridgeJs.inject(it, url) }
+        EchWebBridgeJs.inject(view, url)
     }
 
     override fun onPageCommitVisible(view: WebView?, url: String?) {
@@ -61,9 +61,9 @@ internal class EchWebViewClient : AccompanistWebViewClient() {
         view?.let { EchWebBridgeJs.inject(it, url) }
     }
 
-    override fun onPageFinished(view: WebView?, url: String?) {
+    override fun onPageFinished(view: WebView, url: String?) {
         super.onPageFinished(view, url)
-        view?.let { EchWebBridgeJs.inject(it, url) }
+        EchWebBridgeJs.inject(view, url)
     }
 
     private fun blockedResponse(reason: String): WebResourceResponse = WebResourceResponse(

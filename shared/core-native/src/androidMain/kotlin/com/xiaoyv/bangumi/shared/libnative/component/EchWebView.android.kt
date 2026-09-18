@@ -10,7 +10,7 @@ import com.xiaoyv.bangumi.shared.libnative.ech.EchWebBridgeJs
 import com.xiaoyv.bangumi.shared.libnative.ech.EchWebViewClient
 
 @Composable
-actual fun rememberEchWebViewParams(): PlatformWebViewParams =
+actual fun rememberEchWebViewParams(): PlatformWebViewParams? =
     remember { PlatformWebViewParams(client = EchWebViewClient()) }
 
 actual fun echWebViewFactory(param: WebViewFactoryParam): NativeWebView =
