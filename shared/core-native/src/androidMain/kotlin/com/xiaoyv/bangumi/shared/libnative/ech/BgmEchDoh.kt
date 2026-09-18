@@ -21,6 +21,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 private val HINT_PATTERN = Regex("ipv4hint=([0-9.,]+)")
 
+/** 失败后换端点重试的等待时间；只重试一次。 */
+private const val RETRY_DELAY_MILLIS = 400L
+
+/** 最近一次成功的地址/配置可用多久（超过就只信网络）。 */
+private const val FALLBACK_MAX_AGE_MILLIS = 10 * 60 * 1000L
+
 internal object BgmEchDoh {
     private data class Entry<T>(val value: T, val until: Long)
 
@@ -78,20 +84,27 @@ internal object BgmEchDoh {
         val pool = endpoints
         synchronized(lockFor(host)) {
             addresses[host]?.let { if (it.until > now()) return it.value }
-            return guarded(bestEffort) {
-                val json = fetch(pool, host, "A")
-                val answer = json.getJSONArray("Answer")
-                val result = mutableListOf<InetAddress>()
-                var ttl = 300L
-                for (i in 0 until answer.length()) {
-                    val item = answer.getJSONObject(i)
-                    if (item.optInt("type") != 1) continue
-                    result += parseIpv4Literal(item.getString("data"))
-                    ttl = minOf(ttl, item.getLong("TTL").coerceAtLeast(0))
+            return try {
+                guarded(bestEffort) {
+                    val json = fetch(pool, host, "A")
+                    val answer = json.getJSONArray("Answer")
+                    val result = mutableListOf<InetAddress>()
+                    var ttl = 300L
+                    for (i in 0 until answer.length()) {
+                        val item = answer.getJSONObject(i)
+                        if (item.optInt("type") != 1) continue
+                        result += parseIpv4Literal(item.getString("data"))
+                        ttl = minOf(ttl, item.getLong("TTL").coerceAtLeast(0))
+                    }
+                    if (result.isEmpty()) throw IOException("DoH 没有有效地址")
+                    addresses[host] = Entry(result, now() + ttl * 1000)
+                    persist("addr:$host", result.joinToString(",") { it.hostAddress })
+                    result
                 }
-                if (result.isEmpty()) throw IOException("DoH 没有有效地址")
-                addresses[host] = Entry(result, now() + ttl * 1000)
-                result
+            } catch (error: Exception) {
+                if (bestEffort) throw error
+                // 网关抖动/冷启动失败时，用最近一次成功的地址兜底（仅旧地址，不涉及明文回落）。
+                persistedAddresses(host) ?: throw error
             }
         }
     }
@@ -138,26 +151,33 @@ internal object BgmEchDoh {
         val pool = endpoints
         synchronized(lockFor(host)) {
             configs[host]?.let { if (it.until > now()) return it.value }
-            return guarded(bestEffort) {
-                val json = fetch(pool, host, "HTTPS")
-                val answer = json.getJSONArray("Answer")
-                var selected: ByteArray? = null
-                var ttl = 300L
-                for (i in 0 until answer.length()) {
-                    val item = answer.getJSONObject(i)
-                    if (item.optInt("type") != 65) continue
-                    val encoded = Regex("(?:^|\\s)ech=\"?([A-Za-z0-9+/=]+)").find(item.getString("data"))
-                        ?.groupValues?.get(1) ?: continue
-                    val wire = Base64.decode(encoded, Base64.DEFAULT)
-                    validateConfig(wire)
-                    selected = wire
-                    ttl = item.getLong("TTL").coerceIn(0, 300)
-                    hints[host] = Entry(parseHints(item.getString("data")), now() + ttl * 1000)
-                    break
+            return try {
+                guarded(bestEffort) {
+                    val json = fetch(pool, host, "HTTPS")
+                    val answer = json.getJSONArray("Answer")
+                    var selected: ByteArray? = null
+                    var ttl = 300L
+                    for (i in 0 until answer.length()) {
+                        val item = answer.getJSONObject(i)
+                        if (item.optInt("type") != 65) continue
+                        val encoded = Regex("(?:^|\\s)ech=\"?([A-Za-z0-9+/=]+)").find(item.getString("data"))
+                            ?.groupValues?.get(1) ?: continue
+                        val wire = Base64.decode(encoded, Base64.DEFAULT)
+                        validateConfig(wire)
+                        selected = wire
+                        ttl = item.getLong("TTL").coerceIn(0, 300)
+                        hints[host] = Entry(parseHints(item.getString("data")), now() + ttl * 1000)
+                        break
+                    }
+                    val result = selected ?: throw IOException("网关未提供 ECH 配置，已阻断")
+                    configs[host] = Entry(result, now() + ttl * 1000)
+                    persist("cfg:$host", Base64.encodeToString(result, Base64.DEFAULT))
+                    result
                 }
-                val result = selected ?: throw IOException("网关未提供 ECH 配置，已阻断")
-                configs[host] = Entry(result, now() + ttl * 1000)
-                result
+            } catch (error: Exception) {
+                if (bestEffort) throw error
+                // 旧配置只可能握手失败，不会让 SNI 明文外泄；拿不到就仍然阻断。
+                persistedConfig(host) ?: throw error
             }
         }
     }
@@ -170,14 +190,24 @@ internal object BgmEchDoh {
         }
         return try {
             block()
-        } catch (e: Exception) {
+        } catch (first: Exception) {
             if (bestEffort) throw IOException("DoH 预热失败（不影响后续请求）")
-            preferences.edit().putLong("blocked_until", now() + 300_000L).commit()
-            // 仅下一次用户操作可选备用节点；本次失败不自动重发。
-            val next = preferences.getInt("endpoint_index", 0).toLong() + 1
-            preferences.edit().putInt("endpoint_index", (next % Int.MAX_VALUE).toInt()).commit()
-            throw IOException("DoH 查询失败，已阻断并冷却 5 分钟")
+            // 冷启动时首次查询常因网络刚唤醒而失败：换端点后立刻重试一次，
+            // 仍失败才冷却——避免把一次瞬时抖动放大成 5 分钟整体不可用。
+            rotateEndpoint()
+            try {
+                Thread.sleep(RETRY_DELAY_MILLIS)
+                block()
+            } catch (second: Exception) {
+                preferences.edit().putLong("blocked_until", now() + 300_000L).commit()
+                throw IOException("DoH 查询失败，已阻断并冷却 5 分钟")
+            }
         }
+    }
+
+    private fun rotateEndpoint() {
+        val next = preferences.getInt("endpoint_index", 0).toLong() + 1
+        preferences.edit().putInt("endpoint_index", (next % Int.MAX_VALUE).toInt()).commit()
     }
 
     private fun fetch(pool: List<Endpoint>, host: String, type: String): JSONObject {
@@ -205,6 +235,26 @@ internal object BgmEchDoh {
             }
         }
     }
+
+    /** 最近一次成功的值落盘，网关抖动/冷启动时用来兜底（不改 fail-closed：只是旧值，不会明文回落）。 */
+    private fun persist(key: String, value: String) {
+        preferences.edit().putString(key, value).putLong("$key.at", now()).apply()
+    }
+
+    private fun persisted(key: String): String? {
+        val at = preferences.getLong("$key.at", 0)
+        if (at <= 0 || now() - at > FALLBACK_MAX_AGE_MILLIS) return null
+        return preferences.getString(key, null)
+    }
+
+    private fun persistedAddresses(host: String): List<InetAddress>? =
+        persisted("addr:$host")?.split(',')?.mapNotNull {
+            runCatching { parseIpv4Literal(it.trim()) }.getOrNull()
+        }?.takeIf { it.isNotEmpty() }
+
+    private fun persistedConfig(host: String): ByteArray? =
+        persisted("cfg:$host")?.let { runCatching { Base64.decode(it, Base64.DEFAULT) }.getOrNull() }
+            ?.takeIf { runCatching { validateConfig(it) }.isSuccess }
 
     internal fun parseIpv4Literal(value: String): InetAddress {
         val parts = value.split('.')

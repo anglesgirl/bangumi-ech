@@ -31,6 +31,12 @@ checks = {
         and 'BgmEchDoh.warmUp(BgmEchPolicy.warmUpHosts())' in transport,
     'App 启动即预热（不等首个客户端）': 'BgmEchDoh.warmUp(BgmEchPolicy.warmUpHosts())' in app,
     '预热并发度不低于 4': 'newFixedThreadPool(4)' in doh,
+    'DoH 失败先换端点重试再冷却': 'rotateEndpoint()' in doh and 'RETRY_DELAY_MILLIS' in doh
+        and '已阻断并冷却 5 分钟' in doh,
+    '最近成功的地址可兜底且有有效期': 'persistedAddresses(host)' in doh
+        and 'FALLBACK_MAX_AGE_MILLIS' in doh,
+    '最近成功的 ECH 配置可兜底': 'persistedConfig(host)' in doh
+        and 'Base64.encodeToString(result' in doh,
     'hint 取自 ECH 记录': 'ipv4hint=([0-9.,]+)' in doh and 'hints[host] = Entry(parseHints(' in doh,
     '拒绝明文 HTTP': 'requireHttps(chain.request())' in transport,
     '候选地址按序回退且 DoH 不重试': 'retryOnConnectionFailure(true)' in transport
