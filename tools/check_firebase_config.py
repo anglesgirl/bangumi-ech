@@ -5,7 +5,11 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 root = Path(__file__).resolve().parents[1]
-config = json.loads(Path(sys.argv[1] if len(sys.argv) > 1 else root / 'android/google-services.json').read_text())
+source = Path(sys.argv[1] if len(sys.argv) > 1 else root / 'android/google-services.json')
+if not source.exists():
+    print('未找到 google-services.json（CI 由 secret 注入），跳过 Firebase 接线检查')
+    sys.exit(0)
+config = json.loads(source.read_text())
 package = 'com.anglesgirl.bangumi.ech'
 assert config['project_info']['project_id'] == 'bangumi-49d41'
 assert any(c['client_info']['android_client_info']['package_name'] == package for c in config['client'])

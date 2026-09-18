@@ -481,6 +481,8 @@ object TabTokens {
     )
 
     val settingPixivImgHosts = persistentListOf(
+        // 官方域放第一位并作为默认值：ECH 已打通，图片请求的 Referer 由 ImageInterceptor 带上。
+        ComposeTextTab("https://i.pximg.net/", labelText = "i.pximg.net（官方）"),
         ComposeTextTab("https://xget.xiaoyv.com.cn/pximg/", labelText = "xget.xiaoyv.com.cn"),
         ComposeTextTab("https://imp.pximg.net/", labelText = "imp.pximg.net"),
         ComposeTextTab("https://source.pximg.net/", labelText = "source.pximg.net"),

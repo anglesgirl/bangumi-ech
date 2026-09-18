@@ -43,6 +43,12 @@ internal class EchWebBridge(private val view: WebView) {
     private fun forward(payload: String): JSONObject {
         val json = JSONObject(payload)
         val method = json.optString("method", "GET").uppercase()
+        // 桥对页面里所有脚本都可见：只校验目标域名不够——正文区打开的任意非受保护页面
+        // 都能借用户的 Cookie 去打受保护域名（CSRF）。发起页面自己也必须在受保护范围内。
+        val pageHost = runCatching { java.net.URI(view.url.orEmpty()).host.orEmpty() }.getOrNull().orEmpty()
+        if (!BgmEchPolicy.isProtected(pageHost)) {
+            throw IllegalStateException("当前页面不在受保护范围，拒绝代发")
+        }
         val url = json.optString("url").toHttpUrlOrNull()
             ?: throw IllegalArgumentException("地址无效")
         if (!url.isHttps) throw IllegalArgumentException("禁止明文 HTTP")

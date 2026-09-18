@@ -25,11 +25,14 @@ internal class EchWebViewClient : AccompanistWebViewClient() {
         if (!BgmEchPolicy.isProtected(url.host.orEmpty())) {
             return super.shouldInterceptRequest(view, request)
         }
-        if (!request.method.equals("GET", ignoreCase = true)) {
-            return blockedResponse("该请求需要传输桥，已被阻断（${request.method}）")
+        // GET 由这里代发；HEAD 无响应体、不需要过桥，也放行；其余方法一律阻断，交给 JS 桥。
+        val method = request.method.orEmpty().uppercase()
+        if (method != "GET" && method != "HEAD") {
+            return blockedResponse("该请求需要传输桥，已被阻断（$method）")
         }
         return try {
-            val builder = Request.Builder().url(url.toString()).get()
+            val builder = Request.Builder().url(url.toString())
+            if (method == "HEAD") builder.head() else builder.get()
             request.requestHeaders.forEach { (name, value) ->
                 // Cookie 交给 CookieJar 统一从 CookieManager 取；跳转/协商类头不转发。
                 if (name.equals("Cookie", true) || name.equals("Host", true) ||

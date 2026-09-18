@@ -17,6 +17,14 @@ checks = {
     '不再对搜索词做纯汉字过滤': '.matches(Regex(' not in text,
     '别名仅在原名缺失时使用': '仅当原名缺失时才退回别名' in text,
     '排除中文译名': 'it != data.nameCN' in text,
+    # 默认图片域必须是 P 站官方（作者代理已不需要），否则等于回到"依赖第三方中转"。
+    '默认图片域为 P 站官方': '"pixivImageHost") val pixivImageHost: String = "https://i.pximg.net/"' in (
+        ROOT / 'shared/data/src/commonMain/kotlin/com/xiaoyv/bangumi/shared/data/model/response/bgm/ComposeSetting.kt'
+    ).read_text(),
+    '官方域在候选清单里且居首': (
+        'ComposeTextTab("https://i.pximg.net/", labelText = "i.pximg.net（官方）"),\n'
+        '        ComposeTextTab("https://xget.xiaoyv.com.cn/pximg/"'
+    ) in (ROOT / 'shared/ui/src/commonMain/kotlin/com/xiaoyv/bangumi/shared/ui/composition/TabTokens.kt').read_text(),
 }
 for name, passed in checks.items():
     print(f'{name}：实际={"通过" if passed else "失败"}，期望=通过')

@@ -109,7 +109,7 @@ data class ComposeSetting(
         @SerialName("sniHosts") val sniHosts: SerializeMap<String, List<String>> = DefaultSniHosts,
         @SerialName("customResolve") val customResolve: Boolean = true,
 
-        @SerialName("pixivImageHost") val pixivImageHost: String = "https://xget.xiaoyv.com.cn/pximg/",
+        @SerialName("pixivImageHost") val pixivImageHost: String = "https://i.pximg.net/",
         @SerialName("pixivClientId") val pixivClientId: String = "MOBrBDS8blbauoSck0ZfDbtuzpyT",
         @SerialName("pixivClientSecret") val pixivClientSecret: String = "lsACyCD94FhDUtGTXi3QzcFE2uU1hqtDaKeqrdwj",
         @SerialName("pixivVersion") val pixivVersion: String = "6.141.1",

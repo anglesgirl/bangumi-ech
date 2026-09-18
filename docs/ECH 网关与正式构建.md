@@ -53,3 +53,15 @@ https://网关域名/dns-query|IP|IP,https://备用网关/dns-query|IP
   因此 `android/src/main/res/raw/keep.xml` 必须写着 `tools:keep="@string/ech_doh_pool"`。
 - **这类问题源码门禁查不出来，必须对产物断言**：CI 在构建后读正式包 `resources.arsc`，
   断言资源名和注入的网关域名都在，缺一即失败（只比对资源名不够，值被替换同样会坏）。
+
+## 图片域默认值改回 P 站官方
+
+- 网络设置里 `pixivImageHost` 的默认值原为作者的代理 `https://xget.xiaoyv.com.cn/pximg/`，
+  现改为官方 `https://i.pximg.net/`；候选清单也把 `i.pximg.net（官方）` 提到第一位，
+  否则下拉框里选不中当前值。
+- 走官方域的两个前提都已实测：
+  1. **有 ECH**：经自有网关查 `i.pximg.net` 的 HTTPS 记录，含 `ech=AEX+DQBB…`，
+     A 记录 `172.64.229.6`（日本段，非污染地址）；`source/imp/i-f.pximg.net`、`imgaz.pixiv.net` 同样带 ECH。
+  2. **带 Referer**：`ImageInterceptor` 对含 `i.pximg.net` 的图片请求已设置 `Referer: https://www.pixiv.net/`，
+     官方图床的反盗链要求满足。
+- 作者代理仍保留为可选项（它本身也有 ECH），但不再是默认值。

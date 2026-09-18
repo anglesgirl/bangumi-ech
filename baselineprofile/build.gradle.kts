@@ -32,7 +32,7 @@ android {
         targetSdk = 37
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        testInstrumentationRunnerArguments["targetAppId"] = "com.xiaoyv.bangumi.multiplatform"
+        testInstrumentationRunnerArguments["targetAppId"] = "com.anglesgirl.bangumi.ech"
     }
 
     targetProjectPath = ":android"

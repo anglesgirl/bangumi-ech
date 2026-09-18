@@ -41,8 +41,13 @@ def main() -> int:
         return 1
     listed = ','.join(f"'{item}'" for item in items)
     script = script.replace('__PROTECTED__', '[' + listed + ']')
-    script = script.replace('__BRIDGE_NAME__', 'bgmEchBridge')
-    script = script.replace('__CALLBACK__', '__bgmEchResolve')
+    # 桥名/回调名只在 EchWebBridgeJs 里定义一次；硬编码会让改名后 CI 仍在测旧脚本。
+    for placeholder, const in (('__BRIDGE_NAME__', 'BRIDGE_NAME'), ('__CALLBACK__', 'CALLBACK')):
+        declared = re.search(rf'const val {const} = "([^"]+)"', text)
+        if not declared:
+            print(f'找不到 {const}', file=sys.stderr)
+            return 1
+        script = script.replace(placeholder, declared.group(1))
     if '__PROTECTED__' in script or '__BRIDGE_NAME__' in script or '__CALLBACK__' in script:
         print('占位符没有全部替换', file=sys.stderr)
         return 1

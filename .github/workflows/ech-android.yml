@@ -44,6 +44,7 @@ jobs:
           python3 tools/check_ech_policy.py
           python3 tools/check_ech_transport.py
           python3 tools/check_ech_webview.py
+          python3 tools/check_ech_workflow.py
           python3 tools/check_firebase_config.py
           python3 tools/check_image_source.py
           python3 tools/extract_webview_bridge.py /tmp/bgm-ech-bridge.js
@@ -64,6 +65,7 @@ jobs:
         env:
           ECH_DOH_POOL: ${{ secrets.ECH_DOH_POOL }}
         run: |
+          test -n "$ECH_DOH_POOL" || { printf '缺少 ECH 网关配置\n'; exit 1; }
           set +e
           ./gradlew :android:assembleRelease -PenableIos=false --stacktrace --console=plain --max-workers=2 --no-parallel --no-daemon -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" -Pkotlin.daemon.jvmargs=-Xmx1g 2>&1 | tee gradle-release.log
           result=${PIPESTATUS[0]}
@@ -106,4 +108,4 @@ jobs:
             android/build/outputs/apk/debug/*arm64-v8a*.apk \
             --target "$GITHUB_SHA" \
             --title "安卓正式版 ${GITHUB_SHA:0:8}" \
-            --notes "提交：$GITHUB_SHA。release 包已启用 R8 混淆与资源压缩；debug 包用于对比。原生请求走 ECH，WebView 尚未接入。"
+            --notes "提交：$GITHUB_SHA。release 包已启用 R8 混淆与资源压缩；debug 包用于对比。原生请求与 WebView（GET/HEAD 拦截 + 非 GET 传输桥）都走 ECH。"

@@ -42,6 +42,9 @@ actual class AntiSniWebProxy actual constructor(
 ) : AutoCloseable {
     private val dns = AntiSniDns(initialHosts)
     private val fragmentationPolicy = DomainTlsFragmentationPolicy(tlsFragmentationDomains)
+
+    /** 本实例最近一次成功设置的序号，用来判断自己还是不是"生效中的那次"。 */
+    private var appliedSeq = 0
     private val activeSockets = Collections.synchronizedSet(mutableSetOf<Socket>())
 
     @Volatile
@@ -93,6 +96,7 @@ actual class AntiSniWebProxy actual constructor(
     }
 
     private fun applyWebProxy(port: Int) {
+        val mySeq = APPLY_SEQ.incrementAndGet()
         val proxyConfig = ProxyConfig.Builder()
             .addProxyRule("$LOOPBACK_ADDRESS:$port")
             .addBypassRule("localhost")
@@ -105,10 +109,10 @@ actual class AntiSniWebProxy actual constructor(
             WEBVIEW_EXECUTOR,
         ) {
             try {
-                if (boundPort != port) {
-                    ProxyController.getInstance().clearProxyOverride(WEBVIEW_EXECUTOR) {}
-                    return@setProxyOverride
-                }
+                // 只认最新一次设置：比我们更新的那次已经在跑，就不要动它。
+                if (mySeq < ACTIVE_SEQ) return@setProxyOverride
+                ACTIVE_SEQ = mySeq
+                appliedSeq = mySeq
                 webProxyApplied = true
             } catch (error: Exception) {
                 reportError(error)
@@ -133,12 +137,18 @@ actual class AntiSniWebProxy actual constructor(
             workerPool?.shutdownNow()
             workerPool = null
 
-            if (webProxyApplied && WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
+            // 只有"当前生效的那次设置"才有权清除，否则会把另一处 WebView（人机验证/登录）
+            // 的代理覆盖踩掉，让它静默退回直连。
+            if (webProxyApplied && appliedSeq == ACTIVE_SEQ
+                && WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)
+            ) {
                 webProxyApplied = false
+                ACTIVE_SEQ = 0
                 ProxyController.getInstance().clearProxyOverride(WEBVIEW_EXECUTOR) {
                     invokeSafely(onStopped)
                 }
             } else {
+                webProxyApplied = false
                 invokeSafely(onStopped)
             }
         } catch (error: Exception) {
@@ -479,6 +489,12 @@ actual class AntiSniWebProxy actual constructor(
         const val DEFAULT_HTTPS_PORT = 443
         const val CRLF = "\r\n"
         const val LOG_TAG = "AntiSniWebProxy"
+
+        /** WebView 代理覆盖是进程级的；用自增序号记录"当前生效的是哪一次设置"。 */
+        val APPLY_SEQ = AtomicInteger()
+
+        @Volatile
+        var ACTIVE_SEQ = 0
 
         val HEADER_TERMINATOR = byteArrayOf(13, 10, 13, 10)
         val CONNECTED_RESPONSE = "HTTP/1.1 200 Connection Established\r\n\r\n".toByteArray(StandardCharsets.US_ASCII)
