@@ -75,7 +75,7 @@ internal class EchWebBridge(private val view: WebView) {
                 throw IllegalArgumentException("响应体过大，已阻断")
             }
             val buffer = okio.Buffer()
-            body?.source()?.let { source -> buffer.write(source, MAX_BODY_BYTES + 1) }
+            body?.source()?.let { source -> buffer.write(source, MAX_BODY_BYTES.toLong() + 1) }
             if (buffer.size > MAX_BODY_BYTES) throw IllegalArgumentException("响应体过大，已阻断")
             val bytes = buffer.readByteArray()
             val headers = JSONObject()

@@ -50,7 +50,7 @@ checks = {
     '安卓平台参数与工厂已接线': 'PlatformWebViewParams(client = EchWebViewClient())' in android
         and 'expect fun echWebViewFactory' in common,
     'WebView 代理优先用实测固定 IP': 'BgmEchPolicy.pinnedAddresses(host)' in read(NATIVE / '../sni/AntiSniWebProxy.android.kt')
-        and '(pinned + configured + resolved)' in read(NATIVE / '../sni/AntiSniWebProxy.android.kt'),
+        and '(pinned + resolved + configured)' in read(NATIVE / '../sni/AntiSniWebProxy.android.kt'),
     '仅换地址的域名不动 TLS': 'AntiSniSocket(socket, fragmentationPolicy, host)' in read(NATIVE / '../sni/AntiSniWebProxy.android.kt')
         and 'isProtected' not in read(NATIVE / '../sni/AntiSniWebProxy.android.kt').split('candidateAddresses')[1][:400],
     '其他平台保持原行为': 'rememberEchWebViewParams(): PlatformWebViewParams? = null'

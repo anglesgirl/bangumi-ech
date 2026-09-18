@@ -12,7 +12,6 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 import com.xiaoyv.bangumi.shared.libnative.ech.BgmEchDoh
-import com.xiaoyv.bangumi.shared.libnative.ech.BgmEchPolicy
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
@@ -223,7 +222,7 @@ actual class AntiSniWebProxy actual constructor(
     }
 
     /**
-     * 候选地址顺序：**只换地址的域名的首选固定 IP** → 配置里的映射 → 自有 DoH 的当前地址。
+     * 候选地址顺序：**实测固定 IP** → 自有 DoH 的当前地址 → 配置映射/系统解析。
      * 这里只动连接地址，SNI 与 TLS 仍由 WebView 自己完成（保持浏览器指纹）。
      */
     private fun candidateAddresses(host: String): List<InetAddress> {
@@ -236,7 +235,9 @@ actual class AntiSniWebProxy actual constructor(
         } else {
             emptyList()
         }
-        val merged = (pinned + configured + resolved).distinct().take(MAX_CANDIDATE_ADDRESSES)
+        // 顺序有意义：系统解析（configured）在污染网络里会给假地址，
+        // 只换地址的域名要先用「实测固定 IP → 自有 DoH」，最后才轮到它。
+        val merged = (pinned + resolved + configured).distinct().take(MAX_CANDIDATE_ADDRESSES)
         if (merged.isEmpty()) throw IllegalStateException("No address available for $host")
         return merged
     }
