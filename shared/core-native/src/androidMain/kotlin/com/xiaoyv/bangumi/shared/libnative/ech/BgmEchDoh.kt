@@ -2,7 +2,7 @@ package com.xiaoyv.bangumi.shared.libnative.ech
 
 import android.util.Base64
 import com.xiaoyv.bangumi.shared.libnative.application
-import okhttp3.Dns
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -18,23 +18,34 @@ import java.util.concurrent.TimeUnit
  */
 internal object BgmEchDoh {
     private data class Entry<T>(val value: T, val until: Long)
+
+    /** 网关条目：URL 与其自带地址。受污染的网络里不能用系统 DNS 解析网关域名。 */
+    private data class Endpoint(val url: HttpUrl, val addresses: List<InetAddress>)
     private val addresses = mutableMapOf<String, Entry<List<InetAddress>>>()
     private val configs = mutableMapOf<String, Entry<ByteArray>>()
     private val preferences by lazy { application.getSharedPreferences("ech_doh_state", 0) }
+    /**
+     * 网关池格式 `https://网关/路径|IP|IP`，逗号分隔多条。
+     * 每条必须自带 IP：缺 IP 直接阻断，绝不用系统 DNS 解析网关。
+     */
     private val endpoints by lazy {
         val id = application.resources.getIdentifier("ech_doh_pool", "string", application.packageName)
-        if (id == 0) emptyList() else application.getString(id).split(',').map { it.trim() }
-            .filter { it.isNotEmpty() }.map { it.toHttpUrl() }.onEach {
-                require(it.isHttps && it.username.isEmpty() && it.password.isEmpty())
-                require(!BgmEchPolicy.isProtected(it.host))
+        if (id == 0) emptyList() else application.getString(id).split(',')
+            .map { it.trim() }.filter { it.isNotEmpty() }.map { entry ->
+                val parts = entry.split('|').map { it.trim() }
+                val url = parts.first().toHttpUrl()
+                require(url.isHttps && url.username.isEmpty() && url.password.isEmpty())
+                require(!BgmEchPolicy.isProtected(url.host))
+                if (parts.size < 2) throw IOException("ECH 网关缺少自有 IP，已阻断")
+                Endpoint(url, parts.drop(1).map { parseIpv4Literal(it) })
             }
     }
     private val client by lazy {
         OkHttpClient.Builder()
             .dns { host ->
-                if (endpoints.any { it.host == host } && host.endsWith(".cloudflare-gateway.com")) {
-                    listOf("162.159.36.20", "162.159.36.5").map(::parseIpv4Literal)
-                } else Dns.SYSTEM.lookup(host)
+                val own = endpoints.filter { it.url.host == host }.flatMap { it.addresses }.distinct()
+                if (own.isEmpty()) throw IOException("ECH 网关没有自身地址，禁止系统解析")
+                own
             }
             .proxy(java.net.Proxy.NO_PROXY)
             .followRedirects(false)
@@ -49,9 +60,10 @@ internal object BgmEchDoh {
     @Synchronized
     fun resolve(hostname: String): List<InetAddress> {
         val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
+        val pool = endpoints
         addresses[host]?.let { if (it.until > java.lang.System.currentTimeMillis()) return it.value }
         return guarded {
-            val json = fetch(host, "A")
+            val json = fetch(pool, host, "A")
             val answer = json.getJSONArray("Answer")
             val result = mutableListOf<InetAddress>()
             var ttl = 300L
@@ -70,9 +82,10 @@ internal object BgmEchDoh {
     @Synchronized
     fun echConfig(hostname: String): ByteArray {
         val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
+        val pool = endpoints
         configs[host]?.let { if (it.until > java.lang.System.currentTimeMillis()) return it.value }
         return guarded {
-            val json = fetch(host, "HTTPS")
+            val json = fetch(pool, host, "HTTPS")
             val answer = json.getJSONArray("Answer")
             var selected: ByteArray? = null
             var ttl = 300L
@@ -108,10 +121,11 @@ internal object BgmEchDoh {
         }
     }
 
-    private fun fetch(host: String, type: String): JSONObject {
-        if (endpoints.isEmpty()) throw IOException("未配置 ECH 网关")
-        val endpoint = endpoints[preferences.getInt("endpoint_index", 0).mod(endpoints.size)]
-        val url = endpoint.newBuilder().setQueryParameter("name", host).setQueryParameter("type", type).build()
+    private fun fetch(pool: List<Endpoint>, host: String, type: String): JSONObject {
+        if (pool.isEmpty()) throw IOException("未配置 ECH 网关")
+        val endpoint = pool[preferences.getInt("endpoint_index", 0).mod(pool.size)]
+        val url = endpoint.url.newBuilder()
+            .setQueryParameter("name", host).setQueryParameter("type", type).build()
         val request = Request.Builder().url(url).header("Accept", "application/dns-json").build()
         return client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw IOException("DoH 状态异常")

@@ -36,6 +36,7 @@ internal object BgmEchTransport {
             HostSocketFactory(context.socketFactory, original.sslSocketFactory),
             policyTrustManager,
         )
+        // 受保护域名的地址只来自网关 DoH，绝不回落到会给出污染结果的系统解析。
         builder.dns(object : Dns {
             override fun lookup(hostname: String): List<InetAddress> {
                 if (BgmEchPolicy.isProtected(hostname)) return BgmEchDoh.resolve(hostname)
@@ -53,11 +54,14 @@ internal object BgmEchTransport {
                 if (BgmEchPolicy.isProtected(uri.host.orEmpty())) return listOf(Proxy.NO_PROXY)
                 return original.proxy?.let { listOf(it) } ?: original.proxySelector.select(uri)
             }
+
             override fun connectFailed(uri: URI, sa: SocketAddress, ioe: IOException) {
                 original.proxySelector.connectFailed(uri, sa, ioe)
             }
         })
-        builder.retryOnConnectionFailure(false)
+        // 网关可能为同一域名给出多个地址：按序回退，避免单个地址不可达就整页失败。
+        // 只影响连接建立；收到响应后不重发请求，DoH 查询自身也不重试。
+        builder.retryOnConnectionFailure(true)
         builder.followSslRedirects(false)
         builder.addInterceptor(Interceptor { chain ->
             requireHttps(chain.request())

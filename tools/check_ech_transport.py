@@ -20,12 +20,15 @@ checks = {
         and not (native / 'sni/AntiSniTlsEngine.kt').exists(),
     '握手前注入真实配置': 'Conscrypt.setEchConfigList(socket, config)' in transport,
     '使用带策略的信任管理器': 'BgmEchPolicy.PolicyTrustManager' in transport,
-    '保护域名 DNS 不回落系统': 'return BgmEchDoh.resolve(hostname)' in transport,
+    '保护域名不使用系统 DNS': 'return BgmEchDoh.resolve(hostname)' in transport
+        and 'original.dns.lookup(hostname)' in transport,
     '拒绝明文 HTTP': 'requireHttps(chain.request())' in transport,
-    '禁止自动连接重试': 'retryOnConnectionFailure(false)' in transport and 'retryOnConnectionFailure(false)' in doh,
+    '候选地址按序回退且 DoH 不重试': 'retryOnConnectionFailure(true)' in transport
+        and 'retryOnConnectionFailure(false)' in doh,
+    '网关自带 IP 且禁止系统解析': 'ECH 网关缺少自有 IP' in doh and 'Dns.SYSTEM' not in doh,
     '网关池通过资源读取': '"ech_doh_pool"' in doh,
     '失败冷却持久化': 'putLong("blocked_until",' in doh and '300_000L' in doh,
-    '无写死 ECH 配置': 'Base64.decode' in doh and 'fetch(host, "HTTPS")' in doh,
+    '无写死 ECH 配置': 'Base64.decode' in doh and 'fetch(pool, host, "HTTPS")' in doh,
     'IP 响应先校验再解析': 'parseIpv4Literal' in doh and 'InetAddress.getByAddress' in doh,
 }
 for name, passed in checks.items():

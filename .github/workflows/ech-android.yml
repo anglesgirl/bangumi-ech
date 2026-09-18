@@ -1,4 +1,4 @@
-name: 安卓 ECH 测试构建
+name: 安卓 ECH 正式构建
 on:
   push:
     branches: [ech-conscrypt]
@@ -11,7 +11,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -41,14 +41,23 @@ jobs:
           python3 tools/check_ech_policy.py
           python3 tools/check_ech_transport.py
           python3 tools/check_firebase_config.py
-      - name: 构建安卓测试包
+      - name: 构建调试包
         env:
           ECH_DOH_POOL: ${{ secrets.ECH_DOH_POOL }}
         run: |
           test -n "$ECH_DOH_POOL" || { printf '缺少 ECH 网关配置\n'; exit 1; }
           { free -h; df -h .; } | tee runner-resources.log
           set +e
-          ./gradlew :android:assembleDebug -PenableIos=false --stacktrace --console=plain --max-workers=2 --no-parallel --no-daemon -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" -Pkotlin.daemon.jvmargs=-Xmx1g 2>&1 | tee gradle-build.log
+          ./gradlew :android:assembleDebug -PenableIos=false --stacktrace --console=plain --max-workers=2 --no-parallel --no-daemon -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" -Pkotlin.daemon.jvmargs=-Xmx1g 2>&1 | tee gradle-debug.log
+          result=${PIPESTATUS[0]}
+          { free -h; df -h .; } >> runner-resources.log
+          exit "$result"
+      - name: 构建正式包
+        env:
+          ECH_DOH_POOL: ${{ secrets.ECH_DOH_POOL }}
+        run: |
+          set +e
+          ./gradlew :android:assembleRelease -PenableIos=false --stacktrace --console=plain --max-workers=2 --no-parallel --no-daemon -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" -Pkotlin.daemon.jvmargs=-Xmx1g 2>&1 | tee gradle-release.log
           result=${PIPESTATUS[0]}
           { free -h; df -h .; } >> runner-resources.log
           exit "$result"
@@ -59,17 +68,19 @@ jobs:
         with:
           name: build-diagnostics-${{ github.run_id }}
           path: |
-            gradle-build.log
+            gradle-debug.log
+            gradle-release.log
             runner-resources.log
           retention-days: 3
           if-no-files-found: ignore
-      - name: 保存私有测试包
+      - name: 保存私有正式包
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release create "test-${GITHUB_RUN_ID}" \
+          gh release create "ech-${GITHUB_RUN_ID}" \
+            android/build/outputs/apk/release/*arm64-v8a*.apk \
             android/build/outputs/apk/debug/*arm64-v8a*.apk \
-            --target "$GITHUB_SHA" --prerelease --latest=false \
-            --title "安卓测试 ${GITHUB_SHA:0:8}" \
-            --notes "提交：$GITHUB_SHA。仅原生网络 ECH 测试，WebView 尚未接入，禁止输入真实账号。"
+            --target "$GITHUB_SHA" \
+            --title "安卓正式版 ${GITHUB_SHA:0:8}" \
+            --notes "提交：$GITHUB_SHA。release 包已启用 R8 混淆与资源压缩；debug 包用于对比。原生请求走 ECH，WebView 尚未接入。"
