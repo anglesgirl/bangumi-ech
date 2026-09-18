@@ -63,5 +63,8 @@ node tools/webview_bridge_test.js /tmp/bgm-ech-bridge.js          # 22 项接管
   **残留面**：受保护页面里的第三方子框架仍可调用桥，未再细化。
 - **代理覆盖是进程级的**：用自增序号标记"当前生效的是哪次设置"，旧的 `stop()` 不再无条件 `clearProxyOverride`，
   避免人机验证与登录两处 WebView 互踩（一方 dispose 会让另一方静默退回直连）。
+- **磁盘缓存**：拦截式响应会绕过 WebView 自身的 HTTP 缓存，必须给这条客户端配 `okhttp3.Cache`
+  （`cacheDir/ech-webview`，128MB）。不配就是每次打开把页面与图片整套重下一遍——
+  外部浏览器有缓存所以"秒开"，内置浏览器"加载很久"，差别主要在此。缓存策略交给服务器头。
 - **跳转**：传输层只关掉了 `followSslRedirects`，https→https 的重定向由客户端内部跟随（浏览器语义），
   每一跳的 `Set-Cookie` 都会写回 `CookieManager`，因此页面通常直接看到最终响应。

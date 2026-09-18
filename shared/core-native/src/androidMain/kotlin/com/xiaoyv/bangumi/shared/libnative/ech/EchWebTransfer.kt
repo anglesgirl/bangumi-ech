@@ -1,6 +1,8 @@
 package com.xiaoyv.bangumi.shared.libnative.ech
 
 import android.webkit.CookieManager
+import com.xiaoyv.bangumi.shared.libnative.application
+import okhttp3.Cache
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
@@ -18,8 +20,22 @@ import java.util.concurrent.TimeUnit
  * https→https 的跳转由客户端内部跟随（浏览器语义）；Set-Cookie 在每一跳都会落进 CookieManager。
  */
 internal object EchWebTransfer {
+    /**
+     * WebView 这条路的磁盘缓存。
+     *
+     * 拦截式响应会绕过 WebView 自己的 HTTP 缓存（Android 的已知行为），
+     * 所以不配缓存就等于：**每次打开页面都把 HTML/CSS/JS/图片整套重新下一遍**。
+     * 外部浏览器有自己的磁盘缓存，于是"浏览器秒开、内置浏览器加载很久"——
+     * 差别主要就在这里。128MB 上限，缓存策略交给服务器头（OkHttp 自动遵守
+     * cache-control / ETag），不自己造新鲜度规则。
+     */
+    private val cache: Cache by lazy {
+        Cache(java.io.File(application.cacheDir, "ech-webview"), 128L * 1024 * 1024)
+    }
+
     val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
+            .cache(cache)
             .cookieJar(WebViewCookieJar)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
