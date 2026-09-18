@@ -20,6 +20,10 @@ object BgmEchH3 {
     @Volatile
     private var loaded = false
 
+    /** 最近一次 JNI 返回的 JSON（失败时用来定位原因） */
+    @Volatile
+    private var lastJson: String = ""
+
     private fun ensureLoaded(): Boolean {
         if (loaded) return true
         return try {
@@ -77,6 +81,7 @@ object BgmEchH3 {
             return null
         }
         val saved = try {
+            lastJson = json
             JSONObject(json).optString("saved_to", "")
         } catch (_: Throwable) {
             ""
@@ -89,6 +94,39 @@ object BgmEchH3 {
      * 非受保护域名 / 解析失败 / 握手失败 一律返回 null（调用方回落 TCP/ECH，fail-closed）。
      * 之所以放在本模块，是因为 [BgmEchDoh] / [BgmEchPolicy] 是模块内 internal。
      */
+    private const val DIAG_URL = "https://log.anglesgirl.eu.org/v1/events"
+    private val lastReport = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /** 只在失败时上报、同 host 60s 最多一条：判断"图慢"是 H3 没走，还是链路本身慢。 */
+    private fun report(host: String, reason: String) {
+        val now = System.currentTimeMillis()
+        if (now - (lastReport[host] ?: 0L) < 60_000L) return
+        lastReport[host] = now
+        Thread {
+            runCatching {
+                val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
+                    .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+                val json = org.json.JSONObject()
+                    .put("app", "bangumi-ech")
+                    .put("event", "h3-image-miss")
+                    .put("timestamp", fmt.format(java.util.Date()))
+                    .put("host", host)
+                    .put("reason", reason)
+                    .put("detail", lastJson.take(1200))
+                val c = (java.net.URL(DIAG_URL).openConnection() as java.net.HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                }
+                c.outputStream.use { it.write(json.toString().toByteArray()) }
+                c.responseCode
+                c.disconnect()
+            }
+        }.start()
+    }
+
     fun fetchImageToFile(context: Context, url: String): File? {
         val uri = try {
             java.net.URI(url)
@@ -97,7 +135,8 @@ object BgmEchH3 {
         }
         val host = uri.host ?: return null
         if (!BgmEchPolicy.isProtected(host)) return null
-        val ip = runCatching { BgmEchDoh.resolve(host).firstOrNull()?.hostAddress }.getOrNull() ?: return null
+        val ip = runCatching { BgmEchDoh.resolve(host).firstOrNull()?.hostAddress }.getOrNull()
+            ?: run { report(host, "DoH 未解析出 IP"); return null }
         val ech = runCatching { BgmEchDoh.echConfig(host) }.getOrNull()
         val pathWithQuery = buildString {
             append(uri.rawPath ?: "/")
@@ -106,7 +145,10 @@ object BgmEchH3 {
         val referer = if (host.endsWith("pximg.net")) "https://www.pixiv.net/" else null
         val out = File(context.cacheDir, "h3-" + System.nanoTime() + ".bin")
         val ok = fetchToFile(context, host, ip, ech, pathWithQuery, referer, out)
-        if (ok == null) out.delete()
+        if (ok == null) {
+            report(host, "H3 未取回（ech=" + (ech?.size ?: 0) + "B, ip=" + ip + "）")
+            out.delete()
+        }
         return ok
     }
 
