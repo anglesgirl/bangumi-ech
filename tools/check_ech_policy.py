@@ -23,7 +23,8 @@ checks = {
     '仅换地址的域名不要求 ECH': 'isDohOnly' in text
         and 'if (isProtected(hostname)) DomainEncryptionMode.REQUIRED' in text,
     '仅换地址的域名有实测固定 IP': '"104.18.40.152"' in text and '"172.64.147.104"' in text,
-    '无 ECH 图源按挂载地址走': '"anime-pictures.net"' in text,
+    '注入 ECH 可用的图源纳入强制范围':
+        '"anime-pictures.net"' in text.split('dohOnlyDomains')[0],
     '预热主机清单存在': 'warmUpHosts' in text and '"app-api.pixiv.net"' in text,
 }
 for name, passed in checks.items():

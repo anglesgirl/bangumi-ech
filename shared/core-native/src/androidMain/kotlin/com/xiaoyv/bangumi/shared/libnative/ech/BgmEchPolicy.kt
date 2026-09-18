@@ -20,6 +20,8 @@ object BgmEchPolicy {
         "pixiv.net", "pximg.net",
         // 作者自建图床代理：同样在 CF 上并发布了 ECH 记录。
         "xget.xiaoyv.com.cn",
+        // AnimePic 图源：用户把 ECH 记录注入了这三个主机，JVM 探针实测跨 zone 配置可握手成功。
+        "anime-pictures.net",
     )
 
     /**
@@ -30,8 +32,6 @@ object BgmEchPolicy {
         "challenges.cloudflare.com",
         // 第三方图床：CF 上但没开 ECH，只帮它换掉污染地址。
         "i.pixiv.re",
-        // AnimePic 图源：同样没有 ECH 记录，按用户挂载的地址走。
-        "anime-pictures.net",
     )
 
     /**
