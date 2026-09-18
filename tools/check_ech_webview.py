@@ -46,6 +46,10 @@ checks = {
     'WebView 传输复用 ECH 栈': 'BgmEchTransport.configure(this)' in transfer,
     '安卓平台参数与工厂已接线': 'PlatformWebViewParams(client = EchWebViewClient())' in android
         and 'expect fun echWebViewFactory' in common,
+    'WebView 代理优先用实测固定 IP': 'BgmEchPolicy.pinnedAddresses(host)' in read(NATIVE / '../sni/AntiSniWebProxy.android.kt')
+        and '(pinned + configured + resolved)' in read(NATIVE / '../sni/AntiSniWebProxy.android.kt'),
+    '仅换地址的域名不动 TLS': 'AntiSniSocket(socket, fragmentationPolicy, host)' in read(NATIVE / '../sni/AntiSniWebProxy.android.kt')
+        and 'isProtected' not in read(NATIVE / '../sni/AntiSniWebProxy.android.kt').split('candidateAddresses')[1][:400],
     '其他平台保持原行为': 'rememberEchWebViewParams(): PlatformWebViewParams? = null'
         in read(ROOT / 'shared/core-native/src/iosMain/kotlin/com/xiaoyv/bangumi/shared/libnative/component/EchWebView.ios.kt'),
 }

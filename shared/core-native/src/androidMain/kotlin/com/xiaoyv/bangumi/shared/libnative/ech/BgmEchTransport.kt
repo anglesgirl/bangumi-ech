@@ -40,6 +40,15 @@ internal object BgmEchTransport {
         builder.dns(object : Dns {
             override fun lookup(hostname: String): List<InetAddress> {
                 if (BgmEchPolicy.isProtected(hostname)) return BgmEchDoh.resolve(hostname)
+                // 只换地址的域名（无 ECH 记录）：固定地址优先，其次网关 DoH，最后系统解析。
+                if (BgmEchPolicy.isDohOnly(hostname)) {
+                    val pinned = BgmEchPolicy.pinnedAddresses(hostname).mapNotNull { value ->
+                        runCatching { BgmEchDoh.parseIpv4Literal(value) }.getOrNull()
+                    }
+                    val resolved = runCatching { BgmEchDoh.resolve(hostname) }
+                        .getOrElse { original.dns.lookup(hostname) }
+                    return (pinned + resolved).distinct()
+                }
                 return original.dns.lookup(hostname)
             }
         })

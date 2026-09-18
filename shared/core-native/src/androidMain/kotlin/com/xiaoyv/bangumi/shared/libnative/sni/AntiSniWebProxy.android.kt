@@ -10,6 +10,9 @@ import java.io.BufferedInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
+import com.xiaoyv.bangumi.shared.libnative.ech.BgmEchDoh
+import com.xiaoyv.bangumi.shared.libnative.ech.BgmEchPolicy
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
@@ -208,9 +211,28 @@ actual class AntiSniWebProxy actual constructor(
         }
     }
 
+    /**
+     * 候选地址顺序：**只换地址的域名的首选固定 IP** → 配置里的映射 → 自有 DoH 的当前地址。
+     * 这里只动连接地址，SNI 与 TLS 仍由 WebView 自己完成（保持浏览器指纹）。
+     */
+    private fun candidateAddresses(host: String): List<InetAddress> {
+        val pinned = BgmEchPolicy.pinnedAddresses(host).mapNotNull { value ->
+            runCatching { InetAddress.getByName(value) }.getOrNull()
+        }
+        val configured = runCatching { dns.lookup(host) }.getOrNull().orEmpty()
+        val resolved = if (BgmEchPolicy.isDohOnly(host)) {
+            runCatching { BgmEchDoh.resolve(host) }.getOrNull().orEmpty()
+        } else {
+            emptyList()
+        }
+        val merged = (pinned + configured + resolved).distinct().take(MAX_CANDIDATE_ADDRESSES)
+        if (merged.isEmpty()) throw IllegalStateException("No address available for $host")
+        return merged
+    }
+
     private fun connectRemote(host: String, port: Int): Socket {
         var lastFailure: Exception? = null
-        for (address in dns.lookup(host)) {
+        for (address in candidateAddresses(host)) {
             val socket = Socket()
             try {
                 configureSocket(socket)
@@ -436,6 +458,7 @@ actual class AntiSniWebProxy actual constructor(
     }
 
     private companion object {
+        const val MAX_CANDIDATE_ADDRESSES = 6
         const val LOOPBACK_ADDRESS = "127.0.0.1"
         const val ACCEPT_BACKLOG = 128
         const val MAX_HEADER_SIZE = 32 * 1024

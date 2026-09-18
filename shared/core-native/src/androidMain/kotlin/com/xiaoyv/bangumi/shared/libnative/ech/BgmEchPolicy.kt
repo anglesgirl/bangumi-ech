@@ -14,11 +14,35 @@ import javax.net.ssl.X509TrustManager
  * 本策略存在不代表网络已获得 ECH，WebView 也不会自动使用此策略。
  */
 object BgmEchPolicy {
-    private val domains = setOf("bgm.tv", "bangumi.tv", "chii.in")
+    /** 网关已发布 ECH 记录、必须走加密通道的域名。 */
+    private val domains = setOf("bgm.tv", "bangumi.tv", "chii.in", "pixiv.net", "pximg.net")
 
-    fun isProtected(hostname: String): Boolean {
+    /**
+     * 没有 ECH 记录、但地址会被污染的域名：只替换解析地址，**不动 TLS**（保持浏览器自身指纹）。
+     * 人机验证类站点对 TLS 指纹敏感，所以这类域名不进 ECH 通道，只帮它换 IP。
+     */
+    private val dohOnlyDomains = setOf("challenges.cloudflare.com")
+
+    /**
+     * 只换地址的域名的首选地址：CF 边缘 IP，国内可达性由用户实测选定。
+     * 这两个 IP 已实测能正确服务该域名（证书校验通过、`/cdn-cgi/trace` 回显该域名）。
+     * 失效时自动退回网关 DoH，再退回系统解析。
+     */
+    private val dohOnlyAddresses = mapOf(
+        "challenges.cloudflare.com" to listOf("104.18.40.152", "172.64.147.104"),
+    )
+
+    /** 该域名的首选固定地址（可能为空）。 */
+    fun pinnedAddresses(hostname: String): List<String> =
+        dohOnlyAddresses[hostname.lowercase(Locale.ROOT).trimEnd('.')].orEmpty()
+
+    fun isProtected(hostname: String): Boolean = matches(domains, hostname)
+
+    fun isDohOnly(hostname: String): Boolean = matches(dohOnlyDomains, hostname)
+
+    private fun matches(scope: Set<String>, hostname: String): Boolean {
         val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
-        return domains.any { domain -> host == domain || host.endsWith(".$domain") }
+        return scope.any { domain -> host == domain || host.endsWith(".$domain") }
     }
 
     /** 供注入脚本使用：与 [isProtected] 同一份域名清单，避免两边各写一份。 */

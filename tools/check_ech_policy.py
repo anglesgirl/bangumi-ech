@@ -17,6 +17,10 @@ checks = {
     '仅安卓依赖升级': 'implementation("org.conscrypt:conscrypt-android:2.7.0")' in build and 'implementation(libs.conscrypt.openjdk)' in build,
     'R8 保留反射策略入口': '-keep class com.xiaoyv.bangumi.shared.libnative.ech.BgmEchPolicy$PolicyTrustManager { *; }' in rules,
     '源码未嵌入私有网关': not re.search(r'https?://', text),
+    'Pixiv 全系纳入 ECH 强制范围': '"pixiv.net", "pximg.net"' in text,
+    '仅换地址的域名不要求 ECH': 'isDohOnly' in text
+        and 'if (isProtected(hostname)) DomainEncryptionMode.REQUIRED' in text,
+    '仅换地址的域名有实测固定 IP': '"104.18.40.152"' in text and '"172.64.147.104"' in text,
 }
 for name, passed in checks.items():
     print(f'{name}：实际={"通过" if passed else "失败"}，期望=通过')
