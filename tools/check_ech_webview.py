@@ -16,6 +16,7 @@ script = read(NATIVE / 'EchWebBridgeJs.kt')
 transfer = read(NATIVE / 'EchWebTransfer.kt')
 common = read(ROOT / 'shared/core-native/src/commonMain/kotlin/com/xiaoyv/bangumi/shared/libnative/component/EchWebView.kt')
 android = read(ROOT / 'shared/core-native/src/androidMain/kotlin/com/xiaoyv/bangumi/shared/libnative/component/EchWebView.android.kt')
+proxy = read(ROOT / 'shared/core-native/src/androidMain/kotlin/com/xiaoyv/bangumi/shared/libnative/sni/AntiSniWebProxy.android.kt')
 
 hosts = {
     '内置浏览器页': ROOT / 'features/web/src/commonMain/kotlin/com/xiaoyv/bangumi/features/web/WebScreen.kt',
@@ -44,6 +45,8 @@ checks = {
     '不自动跟跳（保住重定向的 Set-Cookie）': 'followRedirects' not in transfer
         and 'followSslRedirects(false)' in read(NATIVE / 'BgmEchTransport.kt'),
     'WebView 传输复用 ECH 栈': 'BgmEchTransport.configure(this)' in transfer,
+    '代理拒绝受保护域名（防绕过明文）': 'ECH Required' in proxy
+        and 'BgmEchPolicy.isProtected(target.host)' in proxy,
     '安卓平台参数与工厂已接线': 'PlatformWebViewParams(client = EchWebViewClient())' in android
         and 'expect fun echWebViewFactory' in common,
     'WebView 代理优先用实测固定 IP': 'BgmEchPolicy.pinnedAddresses(host)' in read(NATIVE / '../sni/AntiSniWebProxy.android.kt')

@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.webkit.ProxyConfig
 import androidx.webkit.ProxyController
 import androidx.webkit.WebViewFeature
+import com.xiaoyv.bangumi.shared.libnative.ech.BgmEchPolicy
 import java.io.BufferedInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -181,6 +182,16 @@ actual class AntiSniWebProxy actual constructor(
                 sendProxyError(client.getOutputStream(), 400, "Bad Request")
                 return
             }
+
+            // 受保护域名只允许走 ECH 通道（WebView 的请求入口 + 注入桥）。
+            // 走到这里说明有请求绕过了接管（如 Worker/WebSocket），
+            // 宁可失败也绝不放它去做明文 SNI 的连接。
+            if (BgmEchPolicy.isProtected(target.host)) {
+                reportError(IllegalStateException("受保护域名被代理拦截：" + target.host))
+                sendProxyError(client.getOutputStream(), 502, "ECH Required")
+                return
+            }
+
             remote = connectRemote(target.host, target.port)
             activeSockets += remote
 
