@@ -40,7 +40,8 @@ object BgmEchPolicy {
      * 失效时自动退回网关 DoH，再退回系统解析。
      */
     private val dohOnlyAddresses = mapOf(
-        "challenges.cloudflare.com" to listOf("104.18.40.152", "172.64.147.104"),
+        // 优先用用户在国内实测优选过的日本段（172.64.229.0/24），再来一个同段备用。
+        "challenges.cloudflare.com" to listOf("172.64.229.1", "172.64.229.20"),
     )
 
     /** 该域名的首选固定地址（可能为空）。 */
