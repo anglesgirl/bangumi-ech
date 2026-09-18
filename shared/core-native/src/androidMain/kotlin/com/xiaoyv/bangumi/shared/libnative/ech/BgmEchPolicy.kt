@@ -99,7 +99,9 @@ object BgmEchPolicy {
 
     /** 保留系统证书校验；公开方法名供 Conscrypt 反射使用，R8 必须保留。 */
     class PolicyTrustManager(private val delegate: X509TrustManager) : X509TrustManager {
-        private val extensions = X509TrustManagerExtensions(delegate)
+        // 前提：delegate 必须是系统信任管理器（本 App 未装自定义 TM）。
+    // X509TrustManagerExtensions 构造时就会校验这一点，换成其它实现会在建客户端时直接抛异常。
+    private val extensions = X509TrustManagerExtensions(delegate)
 
         fun getNetworkSecurityPolicy(): NetworkSecurityPolicy = policy
 

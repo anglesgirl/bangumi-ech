@@ -109,6 +109,9 @@ actual object System {
         }
     }
 
+    // hosts / tlsFragmentationDomains / customResolve 现在只服务于 WebView 那条老代理，
+    // 原生请求已全部由 BgmEchTransport 接管（自带 DoH 与 ECH）。
+    // 签名暂不删除：它是跨平台 expect/actual，而本 CI 只编安卓，改共享签名无法验证 iOS/jvm 不被破坏。
     actual fun createHttpClient(
         hosts: Map<String, List<String>>,
         tlsFragmentationDomains: Set<String>,

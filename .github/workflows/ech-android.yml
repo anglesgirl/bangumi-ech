@@ -57,7 +57,9 @@ jobs:
           test -n "$ECH_DOH_POOL" || { printf '缺少 ECH 网关配置\n'; exit 1; }
           { free -h; df -h .; } | tee runner-resources.log
           set +e
-          ./gradlew :android:assembleDebug -PenableIos=false --stacktrace --console=plain --max-workers=2 --no-parallel --no-daemon -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" -Pkotlin.daemon.jvmargs=-Xmx1g 2>&1 | tee gradle-debug.log
+          ./gradlew :android:assembleDebug -PenableIos=false \
+            "-PappVersionCode=$(( 2026083110 + ${{ github.run_number }} ))" \
+            --stacktrace --console=plain --max-workers=2 --no-parallel --no-daemon -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" -Pkotlin.daemon.jvmargs=-Xmx1g 2>&1 | tee gradle-debug.log
           result=${PIPESTATUS[0]}
           { free -h; df -h .; } >> runner-resources.log
           exit "$result"
@@ -67,7 +69,9 @@ jobs:
         run: |
           test -n "$ECH_DOH_POOL" || { printf '缺少 ECH 网关配置\n'; exit 1; }
           set +e
-          ./gradlew :android:assembleRelease -PenableIos=false --stacktrace --console=plain --max-workers=2 --no-parallel --no-daemon -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" -Pkotlin.daemon.jvmargs=-Xmx1g 2>&1 | tee gradle-release.log
+          ./gradlew :android:assembleRelease -PenableIos=false \
+            "-PappVersionCode=$(( 2026083110 + ${{ github.run_number }} ))" \
+            --stacktrace --console=plain --max-workers=2 --no-parallel --no-daemon -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" -Pkotlin.daemon.jvmargs=-Xmx1g 2>&1 | tee gradle-release.log
           result=${PIPESTATUS[0]}
           { free -h; df -h .; } >> runner-resources.log
           exit "$result"
@@ -87,7 +91,8 @@ jobs:
           print('正式包网关资源校验通过：', host)
           PY
       - name: 保存诊断日志
-        if: always()
+        # 只在失败时上传：Actions 产物配额常年吃紧，没必要每次绿灯都占一份。
+        if: failure()
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:

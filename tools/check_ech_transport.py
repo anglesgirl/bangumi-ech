@@ -31,13 +31,26 @@ checks = {
         and 'BgmEchDoh.warmUp(BgmEchPolicy.warmUpHosts())' in transport,
     'App 启动即预热（不等首个客户端）': 'BgmEchDoh.warmUp(BgmEchPolicy.warmUpHosts())' in app,
     '预热并发度不低于 4': 'newFixedThreadPool(4)' in doh,
+    # 冷启动策略：先用上次成功的落盘结果开路，后台再取在线数据覆盖。
+    '冷启动优先用落盘结果': 'persistedAddresses(host)?.let { cached ->' in doh
+        and 'persistedConfig(host)?.let { cached ->' in doh
+        and 'CACHED_HOLD_MILLIS' in doh,
+    '缓存值后台刷新且不写冷却': 'refreshLater(host)' in doh
+        and 'fetchAddresses(host, bestEffort = true)' in doh
+        and 'fetchConfig(host, bestEffort = true)' in doh,
+    '缓存有过期上限': 'CACHED_MAX_AGE_MILLIS' in doh and '24 * 60 * 60 * 1000L' in doh,
+    '握手失败丢缓存并用在线配置重试一次': 'invalidateConfig(request.url.host)' in transport
+        and 'catch (error: SSLException)' in transport
+        and 'chain.proceed(request)' in transport,
     'DoH 失败先换端点重试再冷却': 'rotateEndpoint()' in doh and 'RETRY_DELAY_MILLIS' in doh
         and '已阻断并冷却 5 分钟' in doh,
     '最近成功的地址可兜底且有有效期': 'persistedAddresses(host)' in doh
-        and 'FALLBACK_MAX_AGE_MILLIS' in doh,
+        and 'CACHED_MAX_AGE_MILLIS' in doh,
     '最近成功的 ECH 配置可兜底': 'persistedConfig(host)' in doh
         and 'Base64.encodeToString(result' in doh,
-    'hint 取自 ECH 记录': 'ipv4hint=([0-9.,]+)' in doh and 'hints[host] = Entry(parseHints(' in doh,
+    'hint 取自 ECH 记录且会落盘': 'ipv4hint=([0-9.,]+)' in doh
+        and 'hints[host] = Entry(parsed' in doh
+        and 'persist("hint:$host"' in doh,
     '拒绝明文 HTTP': 'requireHttps(chain.request())' in transport,
     '候选地址按序回退且 DoH 不重试': 'retryOnConnectionFailure(true)' in transport
         and 'retryOnConnectionFailure(false)' in doh,

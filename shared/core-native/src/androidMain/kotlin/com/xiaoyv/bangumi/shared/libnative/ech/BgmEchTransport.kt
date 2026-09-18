@@ -15,6 +15,7 @@ import java.net.URI
 import java.security.SecureRandom
 import javax.net.ssl.HostnameVerifier
 import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLException
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
 
@@ -83,7 +84,16 @@ internal object BgmEchTransport {
         builder.followSslRedirects(false)
         builder.addInterceptor(Interceptor { chain ->
             requireHttps(chain.request())
-            chain.proceed(chain.request())
+            val request = chain.request()
+            try {
+                chain.proceed(request)
+            } catch (error: SSLException) {
+                if (!BgmEchPolicy.isProtected(request.url.host)) throw error
+                // 冷启动优先用的是落盘缓存：握手失败说明配置已过期。
+                // 丢掉缓存再走一次，这次会取在线配置；仍失败就如实抛错（fail-closed，不回落明文）。
+                BgmEchDoh.invalidateConfig(request.url.host)
+                chain.proceed(request)
+            }
         })
         // OkHttp 内部重定向的每一跳再次校验，禁止向保护域名发送明文 HTTP。
         builder.addNetworkInterceptor(Interceptor { chain ->

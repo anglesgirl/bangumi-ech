@@ -9,6 +9,7 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 /**
@@ -17,10 +18,13 @@ import java.util.concurrent.Executors
  * 桥对整页 JS 可见，所以这里必须**再判一次**受保护域名与请求形态：
  * 不合规的请求直接回错误，绝不代发（fail-closed），也不回落页面自己的明文 TLS 栈。
  */
+/** 进程级共享池：桥随 WebView 反复创建，一实例一个池会堆出一串空转线程；空闲 60 秒自回收。 */
+private val WEB_BRIDGE_WORKERS: ExecutorService = Executors.newCachedThreadPool { runnable ->
+    Thread(runnable, "ech-web-bridge").apply { isDaemon = true }
+}
+
 internal class EchWebBridge(private val view: WebView) {
-    private val workers = Executors.newCachedThreadPool { runnable ->
-        Thread(runnable, "ech-web-bridge").apply { isDaemon = true }
-    }
+    private val workers = WEB_BRIDGE_WORKERS
 
     @JavascriptInterface
     fun send(id: String, payload: String) {
