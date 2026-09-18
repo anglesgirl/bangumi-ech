@@ -94,6 +94,28 @@ object BgmEchH3 {
      * 非受保护域名 / 解析失败 / 握手失败 一律返回 null（调用方回落 TCP/ECH，fail-closed）。
      * 之所以放在本模块，是因为 [BgmEchDoh] / [BgmEchPolicy] 是模块内 internal。
      */
+    /**
+     * 只接管 pixiv 官方图床：其它图源（如 AnimePic）对请求头敏感，
+     * 走 H3 可能拿到 200 + 非图片内容，Coil 解不出 → 黑屏。宁可不接管。
+     */
+    private val H3_HOSTS = listOf("i.pximg.net")
+
+    /** 图片魔数校验：不是图片一律判失败（回落原链路），绝不把 HTML/拦截页交给解码器。 */
+    private fun looksLikeImage(f: File): Boolean {
+        if (!f.exists() || f.length() < 16) return false
+        val head = ByteArray(16)
+        return runCatching {
+            java.io.FileInputStream(f).use { it.read(head) }
+            val b = head
+            (b[0] == 0xFF.toByte() && b[1] == 0xD8.toByte()) ||                       // jpeg
+                (b[0] == 0x89.toByte() && b[1] == 0x50.toByte()) ||                   // png
+                (b[0] == 0x47.toByte() && b[1] == 0x49.toByte() && b[2] == 0x46.toByte()) || // gif
+                (b[0] == 0x42.toByte() && b[1] == 0x4D.toByte()) ||                   // bmp
+                (b.size >= 12 && String(b, 0, 4) == "RIFF" && String(b, 8, 4) == "WEBP") || // webp
+                (b.size >= 12 && String(b, 4, 4) == "ftyp")                           // avif/heif
+        }.getOrDefault(false)
+    }
+
     private const val DIAG_URL = "https://log.anglesgirl.eu.org/v1/events"
     private val lastReport = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
@@ -134,7 +156,7 @@ object BgmEchH3 {
             return null
         }
         val host = uri.host ?: return null
-        if (!BgmEchPolicy.isProtected(host)) return null
+        if (!H3_HOSTS.any { host == it || host.endsWith(".$it") }) return null
         val ip = runCatching { BgmEchDoh.resolve(host).firstOrNull()?.hostAddress }.getOrNull()
             ?: run { report(host, "DoH 未解析出 IP"); return null }
         val ech = runCatching { BgmEchDoh.echConfig(host) }.getOrNull()
@@ -148,6 +170,12 @@ object BgmEchH3 {
         if (ok == null) {
             report(host, "H3 未取回（ech=" + (ech?.size ?: 0) + "B, ip=" + ip + "）")
             out.delete()
+            return null
+        }
+        if (!looksLikeImage(ok)) {
+            report(host, "H3 返回的不是图片（疑似拦截页/HTML），已回落原链路")
+            ok.delete()
+            return null
         }
         return ok
     }
