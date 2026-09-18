@@ -2,6 +2,9 @@ name: 安卓 ECH 正式构建
 on:
   push:
     branches: [ech-conscrypt]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   workflow_dispatch:
 permissions:
   contents: write

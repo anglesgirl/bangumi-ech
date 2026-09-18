@@ -27,3 +27,10 @@ https://网关域名/dns-query|IP|IP,https://备用网关/dns-query|IP
 - 两者使用同一签名（`android/keystore/why.keystore`），可直接覆盖安装，不用卸载。
 - R8 必须保留 `com.xiaoyv.bangumi.shared.libnative.ech.BgmEchPolicy$PolicyTrustManager`：
   Conscrypt 靠反射取 `getNetworkSecurityPolicy()` 与带主机名的 `checkServerTrusted`，被改名即静默失去 ECH。
+- **资源压缩会删掉运行时按名称读取的资源**：网关地址用 `resources.getIdentifier("ech_doh_pool", …)`
+  读取，没有 `R.string` 引用，`isShrinkResources = true` 会判定它没人用，把资源名和值一起删掉。
+  实测同一提交：debug 包 `resources.arsc` 里有 `ech_doh_pool`×1、`162.159.36.20`×2，
+  release 包两样都是 0 —— 装上后所有受保护域名静默阻断。
+  因此 `android/src/main/res/raw/keep.xml` 必须写着 `tools:keep="@string/ech_doh_pool"`。
+- **这类问题源码门禁查不出来，必须对产物断言**：CI 在构建后读正式包 `resources.arsc`，
+  断言资源名和注入的网关域名都在，缺一即失败（只比对资源名不够，值被替换同样会坏）。
