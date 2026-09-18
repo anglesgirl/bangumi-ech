@@ -173,22 +173,25 @@ class ImageRepositoryImpl(
 
     override suspend fun fetchAnimePictureTag(data: ComposeMono): Result<List<String>> =
         runResult {
-            val names = arrayListOf<String>()
-            names.add(data.name)
+            // anime-pictures 的标签索引按原名（多为日文汉字/假名）建立，原名必须保留。
+            // 历史 bug：原实现用「纯汉字即过滤」(^[\u4e00-\u9fa5]+$) 想丢掉中文名，
+            // 但日文汉字名也落在同一区间，于是原名被删光、搜索词为空，
+            // 结果是任何角色都返回 0 条、页面永远显示「暂无内容」。
+            val original = data.name.trim()
+            if (original.isNotEmpty()) return@runResult listOf(original)
 
+            // 仅当原名缺失时才退回别名，并排除中文译名。
             val nameInfo = data.infobox.find { it.key == "别名" }?.value
-            if (nameInfo !is JsonArray) {
-                val string = nameInfo?.jsonPrimitive?.contentOrNull.orEmpty()
-                if (string.isNotBlank()) names.add(string)
+            val aliases = if (nameInfo !is JsonArray) {
+                listOfNotNull(nameInfo?.jsonPrimitive?.contentOrNull)
             } else {
-                names.addAll(nameInfo.mapNotNull {
+                nameInfo.mapNotNull {
                     (it as? JsonObject)?.getValue("v")?.jsonPrimitive?.contentOrNull
-                })
+                }
             }
-
-            // 原始的 Tag
-            names
-                .filterNot { it.isBlank() || it.matches(Regex("^[\\u4e00-\\u9fa5]+$")) }
+            aliases
+                .map(String::trim)
+                .filter { it.isNotEmpty() && it != data.nameCN }
                 .distinct()
         }
 }

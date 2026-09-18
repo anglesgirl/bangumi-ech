@@ -45,6 +45,7 @@ jobs:
           python3 tools/check_ech_transport.py
           python3 tools/check_ech_webview.py
           python3 tools/check_firebase_config.py
+          python3 tools/check_image_source.py
           python3 tools/extract_webview_bridge.py /tmp/bgm-ech-bridge.js
           node --check /tmp/bgm-ech-bridge.js
           node tools/webview_bridge_test.js /tmp/bgm-ech-bridge.js
