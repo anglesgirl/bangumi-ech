@@ -66,7 +66,9 @@ class ImageRepositoryImpl(
                         id = it.id,
                         type = ListAlbumType.ANIME_PICTURES,
                         image = it.url,
-                        original = it.largeUrl,
+                        // 上游拼的 oimages 大图 URL 无 ?if= 令牌 → CF 一律 302 跳首页 → 详情页空白。
+                        // 实测缩略图那条（opreviews _lp.avif）在真机上可用，故详情页先用它兜住"有图"。
+                        original = it.url,
                         width = it.width,
                         height = it.height,
                         size = it.size,
