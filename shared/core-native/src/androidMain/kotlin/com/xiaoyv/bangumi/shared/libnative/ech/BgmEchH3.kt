@@ -84,6 +84,32 @@ object BgmEchH3 {
         return if (saved.isNotEmpty() && !saved.startsWith("ERR:") && out.exists() && out.length() > 0) out else null
     }
 
+    /**
+     * 对外唯一入口：受保护图片域的 H3+ECH 拉取并落盘。
+     * 非受保护域名 / 解析失败 / 握手失败 一律返回 null（调用方回落 TCP/ECH，fail-closed）。
+     * 之所以放在本模块，是因为 [BgmEchDoh] / [BgmEchPolicy] 是模块内 internal。
+     */
+    fun fetchImageToFile(context: Context, url: String): File? {
+        val uri = try {
+            java.net.URI(url)
+        } catch (_: Throwable) {
+            return null
+        }
+        val host = uri.host ?: return null
+        if (!BgmEchPolicy.isProtected(host)) return null
+        val ip = runCatching { BgmEchDoh.resolve(host).firstOrNull()?.hostAddress }.getOrNull() ?: return null
+        val ech = runCatching { BgmEchDoh.echConfig(host) }.getOrNull()
+        val pathWithQuery = buildString {
+            append(uri.rawPath ?: "/")
+            uri.rawQuery?.let { append('?').append(it) }
+        }
+        val referer = if (host.endsWith("pximg.net")) "https://www.pixiv.net/" else null
+        val out = File(context.cacheDir, "h3-" + System.nanoTime() + ".bin")
+        val ok = fetchToFile(context, host, ip, ech, pathWithQuery, referer, out)
+        if (ok == null) out.delete()
+        return ok
+    }
+
     external fun h3Fetch(
         host: String,
         peerIp: String,

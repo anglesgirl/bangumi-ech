@@ -1,5 +1,6 @@
 package com.xiaoyv.bangumi.image
 
+import coil3.Uri
 import coil3.fetch.Fetcher
 
 /**
@@ -10,4 +11,4 @@ import coil3.fetch.Fetcher
  *
  * @param fallback 原有网络 Fetcher 工厂：H3 失败时由它兜底（fail-closed，不暴露 SNI）
  */
-expect fun h3ImageFetcherFactory(fallback: Fetcher.Factory): Fetcher.Factory?
+expect fun h3ImageFetcherFactory(fallback: Fetcher.Factory<Uri>): Fetcher.Factory<Uri>?
