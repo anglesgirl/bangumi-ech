@@ -44,6 +44,13 @@ private const val CACHED_ADDRESS_MAX_AGE_MILLIS = 5 * 60 * 60 * 1000L
 /** 用缓存开路时在内存里的占位时长；后台拿到在线数据就覆盖它。 */
 private const val CACHED_HOLD_MILLIS = 15 * 60 * 1000L
 
+/**
+ * 参考配置来源。某些域名（如 pixiv 系）在网关注入表里填的配置可能已被 CF 轮换掉，
+ * 表现为握手时服务器直接拒绝（`EchRejectedException`）。这时改用这个域名的**实时**配置兜底：
+ * 跨 zone 注入实测可行（内层 SNI 仍是目标域名，SNI 依旧不外泄）。
+ */
+private const val REFERENCE_ECH_HOST = "xget.xiaoyv.com.cn"
+
 /** 同一主机后台刷新在线数据的最小间隔，避免网关抖动时反复重试。 */
 private const val REFRESH_MIN_INTERVAL_MILLIS = 60 * 1000L
 
@@ -130,6 +137,17 @@ internal object BgmEchDoh {
      */
     fun preferHints(hostname: String): Boolean =
         preferences.getBoolean("hintfirst:${hostname.lowercase(Locale.ROOT).trimEnd('.')}", false)
+
+    /** 该域名的配置是否被服务器拒绝过（拒绝过就改用参考配置兜底，不再反复拿坏配置去撞）。 */
+    fun useConfigFallback(hostname: String): Boolean = preferences.getBoolean(
+        "cfgfallback:${hostname.lowercase(Locale.ROOT).trimEnd('.')}", false,
+    )
+
+    fun markConfigFallback(hostname: String) {
+        val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
+        if (useConfigFallback(host)) return
+        preferences.edit().putBoolean("cfgfallback:$host", true).commit()
+    }
 
     fun markPreferHints(hostname: String) {
         val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
@@ -239,6 +257,13 @@ internal object BgmEchDoh {
         val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
         synchronized(lockFor(host)) {
             configs[host]?.let { if (it.until > now()) return it.value }
+            // 这个域名的配置被服务器拒绝过：直接用参考域名的实时配置（跨 zone 注入）兜底。
+            if (host != REFERENCE_ECH_HOST && useConfigFallback(host)) {
+                val reference = runCatching { fetchConfig(REFERENCE_ECH_HOST, bestEffort) }.getOrNull()
+                if (reference != null) return reference
+                // 参考配置也拿不到（例如参考域名自身出问题）：清掉标记，回到常规路径再试。
+                preferences.edit().remove("cfgfallback:$host").commit()
+            }
             // 冷启动优先：上次成功的 ECH 配置先拿来握手，后台再取在线配置替换。
             persistedConfig(host)?.let { cached ->
                 configs[host] = Entry(cached, now() + CACHED_HOLD_MILLIS)
