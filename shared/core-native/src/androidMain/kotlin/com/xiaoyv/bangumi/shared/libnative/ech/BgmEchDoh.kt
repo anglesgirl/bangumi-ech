@@ -30,16 +30,16 @@ private val HINT_PATTERN = Regex("ipv4hint=([0-9.,]+)")
 private const val RETRY_DELAY_MILLIS = 400L
 
 /**
- * 落盘的 ECH 配置可以直接拿来开路的时长上限。
+ * 落盘 ECH 配置的使用上限：**不能超过 5 小时**（CF 侧密钥约 5 小时轮换）。
  *
- * 浏览器**不怕"过期"**：过期就自动去拉新配置；只有**无效**的配置才丢弃。
- * 所以这里不设短窗口（那会把冷启动又变成等 DoH），失效判断交给
- * [BgmEchTransport] 的"握手失败 → 丢弃配置 → 重取在线配置 → 重试一次"。
+ * 拿过期的配置去握手是匹配不上的，所以超过这个时长就不再使用，
+ * 而是重新取一次在线配置并缓存下来。用缓存开路时也会同时后台刷新。
+ * 另外 [BgmEchTransport] 会兜底：握手被拒 → 丢弃配置 → 重取在线配置 → 重试一次。
  */
-private const val CACHED_CONFIG_MAX_AGE_MILLIS = 24 * 60 * 60 * 1000L
+private const val CACHED_CONFIG_MAX_AGE_MILLIS = 5 * 60 * 60 * 1000L
 
-/** 地址不参与密钥轮换，同样留久一点。 */
-private const val CACHED_ADDRESS_MAX_AGE_MILLIS = 24 * 60 * 60 * 1000L
+/** 地址不参与密钥轮换，但同样按不超过 5 小时缓存（过期就重取一次）。 */
+private const val CACHED_ADDRESS_MAX_AGE_MILLIS = 5 * 60 * 60 * 1000L
 
 /** 用缓存开路时在内存里的占位时长；后台拿到在线数据就覆盖它。 */
 private const val CACHED_HOLD_MILLIS = 15 * 60 * 1000L

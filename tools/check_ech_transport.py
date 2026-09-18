@@ -38,11 +38,9 @@ checks = {
     '缓存值后台刷新且不写冷却': 'refreshLater(host)' in doh
         and 'fetchAddresses(host, bestEffort = true)' in doh
         and 'fetchConfig(host, bestEffort = true)' in doh,
-    # 浏览器语义：不怕"过期"（自动刷新），只怕"无效"（丢弃）。
-    # 所以缓存不设短窗口把冷启动拖慢，失效由"丢弃 + 重取 + 重试"兜底（见下一条断言）。
-    '缓存不设短窗口拦截（过期靠自动刷新兜底）':
-        'CACHED_CONFIG_MAX_AGE_MILLIS' in doh and '24 * 60 * 60 * 1000L' in doh,
-    '地址与配置分开设有效期': 'CACHED_ADDRESS_MAX_AGE_MILLIS' in doh and '24 * 60 * 60 * 1000L' in doh,
+    # ECH 配置约 5 小时轮换：缓存上限不能超过 5 小时，过期就重取一次再缓存。
+    'ECH 配置缓存不超过 5 小时': 'CACHED_CONFIG_MAX_AGE_MILLIS' in doh and '5 * 60 * 60 * 1000L' in doh,
+    '地址同样按 5 小时缓存': 'CACHED_ADDRESS_MAX_AGE_MILLIS' in doh and '5 * 60 * 60 * 1000L' in doh,
     'hints 与配置同源同有效期': 'persisted("hint:$host", CACHED_CONFIG_MAX_AGE_MILLIS)' in doh,
     '服务器拒绝后优先用 ECH 记录里的地址': 'markPreferHints' in transport
         and 'BgmEchDoh.preferHints(hostname)' in transport
