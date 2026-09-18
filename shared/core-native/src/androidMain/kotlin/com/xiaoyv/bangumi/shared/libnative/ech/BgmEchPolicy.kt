@@ -61,13 +61,21 @@ object BgmEchPolicy {
      * 冷启动时把地址与 ECH 配置先取回来，避免用户第一屏等两次 DoH 往返。
      */
     private val warmUpHosts = listOf(
+        // bgm 系
         "bgm.tv",
         "api.bgm.tv",
         "next.bgm.tv",
+        // 图片与图床
         "xget.xiaoyv.com.cn",
+        "i.pximg.net",
+        "api.anime-pictures.net",
+        "opreviews.anime-pictures.net",
+        "oimages.anime-pictures.net",
+        // Pixiv
         "www.pixiv.net",
         "app-api.pixiv.net",
-        "i.pximg.net",
+        // 人机验证（只换地址）
+        "challenges.cloudflare.com",
     )
 
     fun warmUpHosts(): List<String> = warmUpHosts

@@ -26,6 +26,8 @@ checks = {
     '注入 ECH 可用的图源纳入强制范围':
         '"anime-pictures.net"' in text.split('dohOnlyDomains')[0],
     '预热主机清单存在': 'warmUpHosts' in text and '"app-api.pixiv.net"' in text,
+    '预热清单覆盖图源与人机验证': '"oimages.anime-pictures.net"' in text
+        and '"challenges.cloudflare.com"' in text,
 }
 for name, passed in checks.items():
     print(f'{name}：实际={"通过" if passed else "失败"}，期望=通过')

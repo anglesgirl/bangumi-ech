@@ -9,6 +9,7 @@ def read(path):
 transport = read(native / 'ech/BgmEchTransport.kt')
 doh = read(native / 'ech/BgmEchDoh.kt')
 system = read(native / 'System.android.kt')
+app = read(native / 'AppApplication.kt')
 checks = {
     '统一入口无条件安装 ECH': 'BgmEchTransport.configure(this)' in system,
     '统一入口仅保留 ECH 接线': 'config {\n                    BgmEchTransport.configure(this)\n                }' in system,
@@ -28,6 +29,8 @@ checks = {
         and 'ConcurrentHashMap<String, Any>()' in doh,
     '冷启动预热且失败不进冷却': 'fun warmUp(' in doh and 'DoH 预热失败' in doh
         and 'BgmEchDoh.warmUp(BgmEchPolicy.warmUpHosts())' in transport,
+    'App 启动即预热（不等首个客户端）': 'BgmEchDoh.warmUp(BgmEchPolicy.warmUpHosts())' in app,
+    '预热并发度不低于 4': 'newFixedThreadPool(4)' in doh,
     'hint 取自 ECH 记录': 'ipv4hint=([0-9.,]+)' in doh and 'hints[host] = Entry(parseHints(' in doh,
     '拒绝明文 HTTP': 'requireHttps(chain.request())' in transport,
     '候选地址按序回退且 DoH 不重试': 'retryOnConnectionFailure(true)' in transport

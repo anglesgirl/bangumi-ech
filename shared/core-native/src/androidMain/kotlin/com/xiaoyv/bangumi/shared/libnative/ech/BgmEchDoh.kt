@@ -110,7 +110,7 @@ internal object BgmEchDoh {
 
     private val warmedUp = AtomicBoolean(false)
     private val warmUpPool by lazy {
-        Executors.newFixedThreadPool(2) { runnable ->
+        Executors.newFixedThreadPool(4) { runnable ->
             Thread(runnable, "ech-doh-warmup").apply { isDaemon = true }
         }
     }
