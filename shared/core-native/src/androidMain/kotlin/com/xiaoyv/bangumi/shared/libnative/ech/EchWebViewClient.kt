@@ -72,9 +72,19 @@ internal class EchWebViewClient : AccompanistWebViewClient() {
         502,
         "ECH required",
         mapOf("Cache-Control" to "no-store"),
-        ByteArrayInputStream(EchWebBridgeJs.BLOCKED_PAGE.replace("__REASON__", reason).toByteArray()),
+        ByteArrayInputStream(
+            EchWebBridgeJs.BLOCKED_PAGE
+                .replace("__REASON__", reason.escapeForHtml())
+                .toByteArray()
+        ),
     )
 }
+
+/** 原因里可能带 & < >（例如查询串），进 HTML 前先转义，避免页面被撑坏。 */
+private fun String.escapeForHtml(): String = this
+    .replace("&", "&amp;")
+    .replace("<", "&lt;")
+    .replace(">", "&gt;")
 
 /** 响应体流交给 WebView 消费，不能在这里关闭（关流即关闭响应）。 */
 private fun Response.toWebResourceResponse(): WebResourceResponse {

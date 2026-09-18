@@ -14,8 +14,8 @@ import java.util.concurrent.TimeUnit
  * WebView 流量的 ECH 传输：复用与原生请求同一套 Conscrypt ECH 栈与 DoH 策略。
  *
  * Cookie 与 WebView 的 CookieManager 双向同步：出站从 CookieManager 取，
- * 入站把 Set-Cookie 写回，保证页面里的登录态和原生请求不分叉。
- * 不自动跟跳：重定向的 Set-Cookie 必须先落进 CookieManager 再交给页面。
+ * 入站把 Set-Cookie 写回（逐跳都会写），保证页面里的登录态和原生请求不分叉。
+ * https→https 的跳转由客户端内部跟随（浏览器语义）；Set-Cookie 在每一跳都会落进 CookieManager。
  */
 internal object EchWebTransfer {
     val client: OkHttpClient by lazy {
@@ -51,8 +51,9 @@ internal object EchWebTransfer {
     }
 
     /**
-     * WebView 不接受带 Domain 的写入，且 SameSite=None 必须配 Secure；
-     * 这里统一去掉 Domain 与 Secure，把 SameSite=None 放宽为 Lax，否则 cookie 收不下。
+     * 写回 WebView 时去掉 Secure（SameSite=None 必须配 Secure，会造成收不下），
+     * Domain 仅在服务端明确设置（hostOnly=false）时保留；HttpOnly 保留。
+     * OkHttp 4.x 不解析 SameSite，缺省即按 Lax 处理。
      */
     private fun Cookie.toWebViewValue(): String = buildString {
         append(name).append('=').append(value)

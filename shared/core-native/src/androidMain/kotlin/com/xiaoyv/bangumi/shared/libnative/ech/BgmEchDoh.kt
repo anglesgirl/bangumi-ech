@@ -16,8 +16,9 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * 从构建注入的网关获取 DNS 与 ECH 配置。空配置和解析失败均阻断。
- * 串行合并缓存请求；失败冷却写入私有存储，重启不绕过，无自动重试。
+ * 从构建注入的网关获取 DNS 与 ECH 配置。空配置和解析失败均阻断（fail-closed）。
+ * 按主机加锁合并并发请求；失败先换端点重试一次，仍失败才写 5 分钟冷却（持久化，重启不绕过）。
+ * 网络失败时用最近一次成功的地址/配置兜底（10 分钟内），只可能握手失败，不会明文回落。
  */
 private val HINT_PATTERN = Regex("ipv4hint=([0-9.,]+)")
 

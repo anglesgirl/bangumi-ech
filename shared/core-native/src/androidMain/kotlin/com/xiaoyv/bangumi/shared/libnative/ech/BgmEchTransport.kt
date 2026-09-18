@@ -20,7 +20,8 @@ import javax.net.ssl.SSLSocketFactory
 
 /**
  * 在现有 OkHttp 构造入口安装 ECH，保留 Ktor 的业务、Cookie 和认证插件。
- * 受保护主机只走 ECH 和 DoH；此模块不接管 WebView。
+ * 受保护主机的地址与 ECH 配置只来自自有 DoH；WebView 侧由 [EchWebViewClient] 与 [EchWebBridge]
+ * 复用同一套栈（本文件的客户端是它们的基础）。
  */
 internal object BgmEchTransport {
     fun configure(builder: OkHttpClient.Builder) {

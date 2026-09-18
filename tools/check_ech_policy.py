@@ -23,8 +23,10 @@ checks = {
     '仅换地址的域名不要求 ECH': 'isDohOnly' in text
         and 'if (isProtected(hostname)) DomainEncryptionMode.REQUIRED' in text,
     '仅换地址的域名有实测固定 IP': '"172.64.229.1"' in text and '"172.64.229.20"' in text,
+    # 只解析 domains = setOf(...) 这一段，别被别处的文字干扰（注释里提到 dohOnlyDomains 就会误判）。
     '注入 ECH 可用的图源纳入强制范围':
-        '"anime-pictures.net"' in text.split('dohOnlyDomains')[0],
+        '"anime-pictures.net"' in (re.search(r'private val domains = setOf\((.*?)\n    \)', text, re.S)
+                                   or re.match(r'$', '')).group(1),
     '预热主机清单存在': 'warmUpHosts' in text and '"app-api.pixiv.net"' in text,
     '预热清单覆盖图源与人机验证': '"oimages.anime-pictures.net"' in text
         and '"challenges.cloudflare.com"' in text,

@@ -69,8 +69,15 @@ internal class EchWebBridge(private val view: WebView) {
         builder.method(method, body)
 
         EchWebTransfer.client.newCall(builder.build()).execute().use { response ->
-            val bytes = response.body?.bytes() ?: ByteArray(0)
-            if (bytes.size > MAX_BODY_BYTES) throw IllegalArgumentException("响应体过大，已阻断")
+            // 边读边卡上限：不能先 bytes() 整包读进来再判大小，那样大响应会直接把内存吃爆。
+            val body = response.body
+            if ((body?.contentLength() ?: -1L) > MAX_BODY_BYTES) {
+                throw IllegalArgumentException("响应体过大，已阻断")
+            }
+            val buffer = okio.Buffer()
+            body?.source()?.let { source -> buffer.write(source, MAX_BODY_BYTES + 1) }
+            if (buffer.size > MAX_BODY_BYTES) throw IllegalArgumentException("响应体过大，已阻断")
+            val bytes = buffer.readByteArray()
             val headers = JSONObject()
             response.headers.names()
                 .filterNot { it.equals("Set-Cookie", ignoreCase = true) }

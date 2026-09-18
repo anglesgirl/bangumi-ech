@@ -9,9 +9,11 @@ import java.util.Locale
 import javax.net.ssl.X509TrustManager
 
 /**
- * 安卓 Bangumi ECH 策略。只定义保护范围和证书策略，不改变现有网络请求。
- * 接入 TLS 工厂时必须使用 [PolicyTrustManager]，并在握手前提供 ECHConfigList。
- * 本策略存在不代表网络已获得 ECH，WebView 也不会自动使用此策略。
+ * 安卓 Bangumi ECH 策略：定义受保护域名范围与证书策略。
+ *
+ * 两条路都用它判范围：原生请求走 [BgmEchTransport] + [PolicyTrustManager]（必须提供 ECHConfigList
+ * 才放行握手），WebView 走 [EchWebViewClient] + [EchWebBridge]。
+ * 只有"网关发布了 ECH 记录"的域名才进 [domains]；没有 ECH 记录的域名进 [dohOnlyDomains]（只换地址）。
  */
 object BgmEchPolicy {
     /** 网关已发布 ECH 记录、必须走加密通道的域名。 */
