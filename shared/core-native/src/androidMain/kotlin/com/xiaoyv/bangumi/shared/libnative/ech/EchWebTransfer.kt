@@ -61,12 +61,7 @@ internal object EchWebTransfer {
         if (expiresAt < Long.MAX_VALUE / 2) {
             append("; Expires=").append(expiresValue(expiresAt))
         }
-        append(
-            when (sameSite) {
-                Cookie.SameSite.STRICT -> "; SameSite=Strict"
-                else -> "; SameSite=Lax"
-            }
-        )
+        // OkHttp 4.x 的 Cookie 不解析 SameSite；缺省即按 Lax 处理，这里不额外写。
         if (httpOnly) append("; HttpOnly")
     }
 
