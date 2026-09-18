@@ -109,8 +109,12 @@ private fun PreviewAlbumScreenContent(
                 if (state.type == ListAlbumType.PIVIX) {
                     onUiEvent(PreviewAlbumEvent.UI.OnNavScreen(Screen.Gallery(item.id, item.type)))
                 } else {
-                    val items = pagingItems.itemSnapshotList.mapNotNull { it?.image }
-                    val current = items.indexOf(item.image).coerceAtLeast(0)
+                    // 详情页要用"大图"：原实现取 image（缩略图），导致点进去看不到大图。
+                    // 取 original，缺失时再退回 image；索引必须与 items 用同一取值方式，否则会跳错页。
+                    val items = pagingItems.itemSnapshotList.mapNotNull { gallery ->
+                        gallery?.original?.takeIf { it.isNotBlank() } ?: gallery?.image
+                    }
+                    val current = items.indexOf(item.original.ifBlank { item.image }).coerceAtLeast(0)
                     if (items.isNotEmpty()) {
                         onUiEvent(PreviewAlbumEvent.UI.OnNavScreen(Screen.PreviewMain(current, items)))
                     }

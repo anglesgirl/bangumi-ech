@@ -26,7 +26,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
+import coil3.SingletonImageLoader
 import coil3.compose.AsyncImagePainter
+import coil3.compose.LocalPlatformContext
+import coil3.request.ImageRequest
+import androidx.compose.foundation.clickable
 import com.github.panpf.zoomimage.CoilZoomAsyncImage
 import com.xiaoyv.bangumi.core_resource.resources.Res
 import com.xiaoyv.bangumi.core_resource.resources.global_image
@@ -138,6 +142,22 @@ private fun PreviewMainScreenContent(
             }
     }
 
+    // 预取左右相邻页：滑动/退回时不再现解码，明显减轻卡顿。
+    val platformContext = LocalPlatformContext.current
+    LaunchedEffect(pagerState.currentPage, state.items.size) {
+        val loader = SingletonImageLoader.get(platformContext)
+        listOf(pagerState.currentPage - 1, pagerState.currentPage + 1).forEach { index ->
+            state.items.getOrNull(index)?.let { url ->
+                loader.enqueue(
+                    ImageRequest.Builder(platformContext)
+                        .data(url)
+                        .size(1080, 1920)
+                        .build()
+                )
+            }
+        }
+    }
+
     if (state.items.isNotEmpty()) HorizontalPager(
         modifier = Modifier.fillMaxSize(),
         state = pagerState
@@ -146,15 +166,33 @@ private fun PreviewMainScreenContent(
             var isLoading by remember { mutableStateOf(true) }
             val placeholder = state.placeholders.getOrNull(page).orEmpty()
 
-            CoilZoomAsyncImage(
-                modifier = Modifier.fillMaxSize(),
-                model = state.items[page],
-                contentDescription = stringResource(Res.string.global_image),
-                onState = { painterState ->
-                    isLoading = painterState is AsyncImagePainter.State.Loading
-                },
-                onTap = { onUiEvent(PreviewMainEvent.UI.OnNavUp) }
-            )
+            val pageUrl = state.items[page]
+            // AVIF 在 Android 上不支持区域解码，zoomimage 靠 subsampling 会整片空白 —— 列表里用普通
+            // AsyncImage 能正常显示，故 AVIF 页也走普通组件（代价：该页暂时不能缩放）。
+            val isAvif = pageUrl.substringBefore('?').endsWith(".avif", ignoreCase = true)
+            if (isAvif) {
+                AsyncImage(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable { onUiEvent(PreviewMainEvent.UI.OnNavUp) },
+                    model = pageUrl,
+                    contentScale = ContentScale.Fit,
+                    contentDescription = stringResource(Res.string.global_image),
+                    onState = { painterState ->
+                        isLoading = painterState is AsyncImagePainter.State.Loading
+                    },
+                )
+            } else {
+                CoilZoomAsyncImage(
+                    modifier = Modifier.fillMaxSize(),
+                    model = pageUrl,
+                    contentDescription = stringResource(Res.string.global_image),
+                    onState = { painterState ->
+                        isLoading = painterState is AsyncImagePainter.State.Loading
+                    },
+                    onTap = { onUiEvent(PreviewMainEvent.UI.OnNavUp) }
+                )
+            }
 
             // 占位图盖在可缩放图之上（加载期间它自己是不透明背景，画在下面会被盖住）：
             // 这张多半已在 Coil 磁盘缓存里，所以几乎立刻可见；原图到位后它随之消失。
