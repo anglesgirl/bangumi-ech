@@ -30,12 +30,15 @@ private val HINT_PATTERN = Regex("ipv4hint=([0-9.,]+)")
 private const val RETRY_DELAY_MILLIS = 400L
 
 /**
- * ECH 配置的有效期。CF 侧大约 5 小时轮换密钥，过期就必须重取（浏览器也是这么做的），
- * 所以这里留出余量按 4 小时算——过期的配置只会被服务器拒绝（握手失败），不会让 SNI 明文外泄。
+ * 落盘的 ECH 配置可以直接拿来开路的时长上限。
+ *
+ * 浏览器**不怕"过期"**：过期就自动去拉新配置；只有**无效**的配置才丢弃。
+ * 所以这里不设短窗口（那会把冷启动又变成等 DoH），失效判断交给
+ * [BgmEchTransport] 的"握手失败 → 丢弃配置 → 重取在线配置 → 重试一次"。
  */
-private const val CACHED_CONFIG_MAX_AGE_MILLIS = 4 * 60 * 60 * 1000L
+private const val CACHED_CONFIG_MAX_AGE_MILLIS = 24 * 60 * 60 * 1000L
 
-/** 地址不参与密钥轮换，可以留久一点。 */
+/** 地址不参与密钥轮换，同样留久一点。 */
 private const val CACHED_ADDRESS_MAX_AGE_MILLIS = 24 * 60 * 60 * 1000L
 
 /** 用缓存开路时在内存里的占位时长；后台拿到在线数据就覆盖它。 */
