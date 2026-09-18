@@ -19,13 +19,29 @@ import java.io.File
  * 避免每张图都白等一次握手超时。
  */
 private object H3Breaker {
-    private const val COOLDOWN_MS = 5 * 60 * 1000L
+    // 线路抖动（尤其移动走香港）常常"单张断、刷新就好"，所以：
+    // 连续 2 次失败才熔断，且只停 60 秒 —— 别把一次抖动放大成 5 分钟不走 H3。
+    private const val STRIKES = 2
+    private const val COOLDOWN_MS = 60 * 1000L
+    private val fails = java.util.concurrent.ConcurrentHashMap<String, Int>()
     private val blockedUntil = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
-    fun isOpen(url: String): Boolean = (blockedUntil[url] ?: 0L) > System.currentTimeMillis()
-    fun trip(url: String) { blockedUntil[url] = System.currentTimeMillis() + COOLDOWN_MS }
-    fun ok(url: String) { blockedUntil.remove(url) }
+    fun isOpen(host: String): Boolean = (blockedUntil[host] ?: 0L) > System.currentTimeMillis()
+
+    fun fail(host: String) {
+        val n = (fails[host] ?: 0) + 1
+        fails[host] = n
+        if (n >= STRIKES) blockedUntil[host] = System.currentTimeMillis() + COOLDOWN_MS
+    }
+
+    fun ok(host: String) {
+        fails.remove(host)
+        blockedUntil.remove(host)
+    }
 }
+
+private fun hostOf(url: String): String =
+    runCatching { java.net.URI(url).host }.getOrNull() ?: url
 
 /** 受保护图片域：先走 H3+ECH，失败交给 fallback（原 Ktor/OkHttp + Conscrypt 链路）。 */
 internal class H3ImageFetcher(
@@ -50,14 +66,15 @@ internal class H3ImageFetcher(
     }
 
     private fun tryH3(): File? {
-        if (H3Breaker.isOpen(url)) return null // 刚失败过：这段时间直接用 TCP
+        val host = hostOf(url)
+        if (H3Breaker.isOpen(host)) return null // 刚连续失败过：这段时间直接用 TCP
         // 域名是否受保护、IP/ECH 怎么取，都在 core-native 的门面里判定
         val file = BgmEchH3.fetchImageToFile(options.context, url)
         if (file != null) {
-            H3Breaker.ok(url)
+            H3Breaker.ok(host)
             return file
         }
-        H3Breaker.trip(url)
+        H3Breaker.fail(host)
         return null
     }
 }
