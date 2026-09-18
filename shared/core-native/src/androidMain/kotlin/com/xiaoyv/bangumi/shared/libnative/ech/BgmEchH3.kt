@@ -182,6 +182,7 @@ object BgmEchH3 {
             out.delete()
             return null
         }
+        report(host, "H3 成功：" + ok.length() + "B 扩展名=" + ok.extension)
         if (!looksLikeImage(ok)) {
             report(host, "H3 返回的不是图片（疑似拦截页/HTML），已回落原链路")
             ok.delete()

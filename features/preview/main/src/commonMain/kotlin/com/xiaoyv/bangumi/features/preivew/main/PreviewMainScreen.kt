@@ -86,13 +86,15 @@ private fun PreviewMainScreen(
                 title = uiState.data.title,
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
-                    navigationIconContentColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.surface,
+                    // 预览页背景恒为纯黑，图标/标题必须固定用白色：
+                    // 之前用 colorScheme.surface，深色模式下它就是深灰 → 「⋮」看不见
+                    navigationIconContentColor = Color.White,
+                    titleContentColor = Color.White,
                 ),
                 actions = {
                     DropMenuActionButton(
                         options = uiState.data.contextMenus,
-                        imageTint = MaterialTheme.colorScheme.surface,
+                        imageTint = Color.White,
                         onOptionClick = { tab ->
                             when (tab.type) {
                                 0 -> onActionEvent(PreviewMainEvent.Action.OnSaveMedia)
