@@ -99,9 +99,9 @@ internal object BgmEchTransport {
                 // 仍失败就如实抛错（fail-closed，不回落明文）。
                 BgmEchDoh.invalidateConfig(request.url.host)
                 BgmEchDoh.markPreferHints(request.url.host)
-                // 也可能是网关注入的那份配置已经失效：改用参考域名的实时配置兜底，
-                // 否则每次都会拿同一份坏配置去撞（实测 pixiv 系就是这个原因）。
-                BgmEchDoh.markConfigFallback(request.url.host)
+                // 也可能是这份配置本身已经失效：翻成"用它自己的记录"，下次换另一条路取配置，
+                // 否则会一直拿同一份去撞（实测手写/注入的记录过期后怎么拉都是旧的）。
+                BgmEchDoh.markOwnRecordFirst(request.url.host)
                 chain.proceed(request)
             }
         })

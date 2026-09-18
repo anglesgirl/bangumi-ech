@@ -46,10 +46,13 @@ checks = {
         and 'BgmEchDoh.preferHints(hostname)' in transport
         and 'hintfirst:' in doh,
     '地址顺序按标志位切换': 'hinted + preferred else preferred + hinted' in transport,
-    # 网关注入表填错/失效时（pixiv 系实测如此），用参考域名的实时配置兜底，别卡住用户。
-    '配置被拒后改用参考配置兜底': 'markConfigFallback' in transport
-        and 'fetchConfig(REFERENCE_ECH_HOST, bestEffort)' in doh
-        and 'REFERENCE_ECH_HOST' in doh,
+    # 手写/注入的记录过期后再拉还是旧的（实测：连它自己的 zone 都握手不过），
+    # 所以配置一律先取 CF 官方 ECH 域名 cloudflare-ech.com 的实时值。
+    '配置首选 CF 官方 ECH 域名的实时值': 'REFERENCE_ECH_HOST = "cloudflare-ech.com"' in doh
+        and 'fetchConfigFromGateway(REFERENCE_ECH_HOST, bestEffort)' in doh
+        and 'adoptConfig(host, reference)' in doh,
+    '被拒后翻成用该域名自己的记录': 'markOwnRecordFirst' in transport and 'ownfirst:' in doh,
+    '失效时连官方缓存一起丢': 'configs.remove(REFERENCE_ECH_HOST)' in doh,
     '握手失败丢缓存并用在线配置重试一次': 'invalidateConfig(request.url.host)' in transport
         and 'isTlsFailure()' in transport
         and 'chain.proceed(request)' in transport,

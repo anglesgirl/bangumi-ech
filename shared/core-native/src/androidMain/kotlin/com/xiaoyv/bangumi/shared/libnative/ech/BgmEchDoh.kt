@@ -45,11 +45,16 @@ private const val CACHED_ADDRESS_MAX_AGE_MILLIS = 5 * 60 * 60 * 1000L
 private const val CACHED_HOLD_MILLIS = 15 * 60 * 1000L
 
 /**
- * 参考配置来源。某些域名（如 pixiv 系）在网关注入表里填的配置可能已被 CF 轮换掉，
- * 表现为握手时服务器直接拒绝（`EchRejectedException`）。这时改用这个域名的**实时**配置兜底：
- * 跨 zone 注入实测可行（内层 SNI 仍是目标域名，SNI 依旧不外泄）。
+ * 配置的唯一"活源"：CF 官方的 ECH 域名 `cloudflare-ech.com`。
+ *
+ * 它是 CF 自动维护的（随查随新），而"自己手写/注入到别处"的记录一旦过期，**再拉还是那份旧的**，
+ * 拿它去握手只会被服务器拒绝。所以受保护域名一律先取这份配置（跨 zone 注入实测可行：
+ * 内层 SNI 仍是目标域名，SNI 依旧不外泄），只在它拿不到时才退回该域名自己的记录。
+ *
+ * 实测（2026-09-18，App 同款 Conscrypt 栈）：这份配置对 i.pximg.net / pixiv.net / bgm.tv /
+ * api.bgm.tv / anime-pictures.net / xget 全部握手成功。
  */
-private const val REFERENCE_ECH_HOST = "xget.xiaoyv.com.cn"
+private const val REFERENCE_ECH_HOST = "cloudflare-ech.com"
 
 /** 同一主机后台刷新在线数据的最小间隔，避免网关抖动时反复重试。 */
 private const val REFRESH_MIN_INTERVAL_MILLIS = 60 * 1000L
@@ -138,15 +143,20 @@ internal object BgmEchDoh {
     fun preferHints(hostname: String): Boolean =
         preferences.getBoolean("hintfirst:${hostname.lowercase(Locale.ROOT).trimEnd('.')}", false)
 
-    /** 该域名的配置是否被服务器拒绝过（拒绝过就改用参考配置兜底，不再反复拿坏配置去撞）。 */
-    fun useConfigFallback(hostname: String): Boolean = preferences.getBoolean(
-        "cfgfallback:${hostname.lowercase(Locale.ROOT).trimEnd('.')}", false,
+    /**
+     * 该域名是否改用"它自己的记录"优先。
+     *
+     * 默认走官方源 [REFERENCE_ECH_HOST]；只有当官方那份被服务器拒绝过（个别 zone 不吃跨 zone 注入），
+     * 才把它翻过来用该域名自己的记录，免得一直拿同一份撞。
+     */
+    fun ownRecordFirst(hostname: String): Boolean = preferences.getBoolean(
+        "ownfirst:${hostname.lowercase(Locale.ROOT).trimEnd('.')}", false,
     )
 
-    fun markConfigFallback(hostname: String) {
+    fun markOwnRecordFirst(hostname: String) {
         val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
-        if (useConfigFallback(host)) return
-        preferences.edit().putBoolean("cfgfallback:$host", true).commit()
+        if (ownRecordFirst(host)) return
+        preferences.edit().putBoolean("ownfirst:$host", true).commit()
     }
 
     fun markPreferHints(hostname: String) {
@@ -161,6 +171,15 @@ internal object BgmEchDoh {
      */
     fun invalidateConfig(hostname: String) {
         val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
+        // 官方源那份也一起丢掉：它可能就是被拒的那一份，留着会让重试拿回同一个值。
+        synchronized(lockFor(REFERENCE_ECH_HOST)) {
+            configs.remove(REFERENCE_ECH_HOST)
+            hints.remove(REFERENCE_ECH_HOST)
+            preferences.edit()
+                .remove("cfg:$REFERENCE_ECH_HOST").remove("cfg:$REFERENCE_ECH_HOST.at")
+                .remove("hint:$REFERENCE_ECH_HOST").remove("hint:$REFERENCE_ECH_HOST.at")
+                .commit()
+        }
         synchronized(lockFor(host)) {
             configs.remove(host)
             hints.remove(host)
@@ -257,13 +276,6 @@ internal object BgmEchDoh {
         val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
         synchronized(lockFor(host)) {
             configs[host]?.let { if (it.until > now()) return it.value }
-            // 这个域名的配置被服务器拒绝过：直接用参考域名的实时配置（跨 zone 注入）兜底。
-            if (host != REFERENCE_ECH_HOST && useConfigFallback(host)) {
-                val reference = runCatching { fetchConfig(REFERENCE_ECH_HOST, bestEffort) }.getOrNull()
-                if (reference != null) return reference
-                // 参考配置也拿不到（例如参考域名自身出问题）：清掉标记，回到常规路径再试。
-                preferences.edit().remove("cfgfallback:$host").commit()
-            }
             // 冷启动优先：上次成功的 ECH 配置先拿来握手，后台再取在线配置替换。
             persistedConfig(host)?.let { cached ->
                 configs[host] = Entry(cached, now() + CACHED_HOLD_MILLIS)
@@ -281,8 +293,40 @@ internal object BgmEchDoh {
         }
     }
 
-    /** 在线取 ECH 配置（含 ipv4hint）并落盘。 */
+    /**
+     * 取某域名的 ECH 配置：**官方源优先**（[REFERENCE_ECH_HOST]，CF 自动维护、随查随新），
+     * 拿不到或被翻过标志位时才用它自己的记录。两条路的结果都会落到该域名名下缓存起来。
+     */
     private fun fetchConfig(host: String, bestEffort: Boolean): ByteArray {
+        if (host != REFERENCE_ECH_HOST && !ownRecordFirst(host)) {
+            val reference = runCatching { fetchConfigFromGateway(REFERENCE_ECH_HOST, bestEffort) }.getOrNull()
+            if (reference != null) return adoptConfig(host, reference)
+        }
+        return try {
+            fetchConfigFromGateway(host, bestEffort)
+        } catch (error: Exception) {
+            if (host == REFERENCE_ECH_HOST || ownRecordFirst(host)) throw error
+            // 自己的记录也没有（注入表缺项之类）：官方那份仍然可用。
+            val reference = runCatching { fetchConfigFromGateway(REFERENCE_ECH_HOST, bestEffort) }.getOrNull()
+                ?: throw error
+            adoptConfig(host, reference)
+        }
+    }
+
+    /** 把官方源的配置记为**该域名**的配置（连 hints 一起），这样冷启动直接有缓存可用。 */
+    private fun adoptConfig(host: String, config: ByteArray): ByteArray {
+        hints[REFERENCE_ECH_HOST]?.let { stored -> hints[host] = stored }
+        persistConfig(host, config)
+        return config
+    }
+
+    private fun persistConfig(host: String, config: ByteArray) {
+        configs[host] = Entry(config, now() + 300_000L)
+        persist("cfg:$host", Base64.encodeToString(config, Base64.DEFAULT))
+    }
+
+    /** 从网关按域名取 ECH 记录（含 ipv4hint）并落盘。 */
+    private fun fetchConfigFromGateway(host: String, bestEffort: Boolean): ByteArray {
         val pool = endpoints
         return guarded(bestEffort) {
             val json = fetch(pool, host, "HTTPS")
