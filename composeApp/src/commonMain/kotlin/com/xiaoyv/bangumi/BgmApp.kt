@@ -23,6 +23,7 @@ import coil3.compose.setSingletonImageLoaderFactory
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
 import coil3.network.ktor3.KtorNetworkFetcherFactory
+import com.xiaoyv.bangumi.image.h3ImageFetcherFactory
 import coil3.request.CachePolicy
 import coil3.request.crossfade
 import com.xiaoyv.bangumi.core_resource.resources.Res
@@ -83,7 +84,10 @@ fun App() = KoinApplication(configuration = koinConfiguration(declaration = { in
         ImageLoader.Builder(context)
             .crossfade(true)
             .components {
-                add(KtorNetworkFetcherFactory(apiClient.imageHttpClient))
+                val networkFetcher = KtorNetworkFetcherFactory(apiClient.imageHttpClient)
+                // 受保护图片域先试 H3（quiche + ECH）；不通则落回下面的网络 Fetcher
+                h3ImageFetcherFactory(networkFetcher)?.let { add(it) }
+                add(networkFetcher)
                 add(ImageInterceptor)
                 add(AvifDecoderFactory.create(context))
                 addPlatformGifSupport()

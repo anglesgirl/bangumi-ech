@@ -45,3 +45,7 @@ captures
 /shared/core-native/src/cpp/build_x86_64/
 /internal/live2d/official/
 /android/google-services.json
+
+# H3 原生工程：vendor 由 CI 现取现打补丁，target 是本地编译产物
+native-h3/vendor/
+native-h3/target/

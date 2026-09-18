@@ -41,7 +41,9 @@
 -dontwarn okhttp3.internal.platform.**
 -dontwarn okhttp3.internal.Util
 -dontwarn org.conscrypt.**
--keep class org.conscrypt.** { *; }
+-keep class org.conscrypt.**
+# H3/ECH 的 JNI 入口：类名/方法名必须与 Rust 侧的符号一致
+-keep class com.xiaoyv.bangumi.shared.libnative.ech.BgmEchH3 { *; }
 # Conscrypt 通过反射查找此方法；不能被 R8 改名或删除。
 -keep class com.xiaoyv.bangumi.shared.libnative.ech.BgmEchPolicy$PolicyTrustManager { *; }
 -dontwarn org.bouncycastle.**

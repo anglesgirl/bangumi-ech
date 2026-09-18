@@ -26,6 +26,41 @@ jobs:
         with:
           packages: 'platform-tools platforms;android-37.0'
           log-accepted-android-sdk-licenses: false
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi
+
+      - name: 装 NDK 与 cargo-ndk
+        run: |
+          sdkmanager --install "ndk;27.0.12077973" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.0.12077973" >> "$GITHUB_ENV"
+          command -v cargo-ndk || cargo install cargo-ndk --locked
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native-h3
+
+      - name: 取 quiche 源码并打 ECH 补丁
+        run: |
+          set -e
+          curl -sSL https://static.crates.io/crates/quiche/quiche-0.22.0.crate -o /tmp/quiche.crate
+          mkdir -p native-h3/vendor && tar -xzf /tmp/quiche.crate -C native-h3/vendor
+          rm -rf native-h3/vendor/quiche && mv native-h3/vendor/quiche-0.22.0 native-h3/vendor/quiche
+          python3 tools/patch_quiche.py native-h3/vendor/quiche
+
+      - name: 编 H3 原生库（铁律：只留主库 + 验 JNI 符号）
+        run: |
+          set -e
+          cd native-h3
+          cargo ndk -t arm64-v8a -t armeabi-v7a -o ../android/src/main/jniLibs build --release --lib
+          find ../android/src/main/jniLibs -name "libquiche*.so" -delete
+          NM=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm
+          for abi in arm64-v8a armeabi-v7a; do
+            n=$($NM -D ../android/src/main/jniLibs/$abi/libbgm_h3.so | grep -c "Java_com_xiaoyv_bangumi_shared_libnative_ech_BgmEchH3_h3Fetch" || true)
+            echo "$abi JNI 符号命中: $n"
+            [ "$n" -gt 0 ] || { echo "✗ $abi 缺 JNI 符号"; exit 1; }
+          done
       - name: 注入 Firebase 配置
         env:
           FIREBASE_CONFIG: ${{ secrets.GOOGLE_SERVICES_JSON }}
