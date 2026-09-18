@@ -10,6 +10,7 @@ import coil3.fetch.SourceFetchResult
 import coil3.request.Options
 import com.xiaoyv.bangumi.shared.libnative.ech.BgmEchH3
 import okio.FileSystem
+import okio.buffer
 import okio.Path.Companion.toOkioPath
 import java.io.File
 
