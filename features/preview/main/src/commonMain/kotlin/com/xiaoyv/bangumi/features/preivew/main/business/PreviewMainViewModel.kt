@@ -35,6 +35,7 @@ class PreviewMainViewModel(
 
     override fun createInitialState() = PreviewMainState(
         items = args.items.toPersistentList(),
+        placeholders = args.placeholders.toPersistentList(),
         index = args.index,
         contextMenus = persistentListOf(
             ComposeTextTab(0, Res.string.global_save),

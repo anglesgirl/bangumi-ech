@@ -265,7 +265,15 @@ sealed class Screen(
     ) : Screen(SCREEN_ROUTE_SUBJECT_BROWSER)
 
     @Serializable
-    data class PreviewMain(val index: Int, val items: List<String>) : Screen(SCREEN_ROUTE_PREVIEW_MAIN) {
+    data class PreviewMain(
+        val index: Int,
+        val items: List<String>,
+        /**
+         * 与 [items] 下标对应的占位图（一般是列表里已缓存的那张小图）。
+         * 原图动辄几 MB，先显示它能让预览"立刻有画面"，而不是白屏转圈。
+         */
+        val placeholders: List<String> = emptyList(),
+    ) : Screen(SCREEN_ROUTE_PREVIEW_MAIN) {
         constructor(url: String) : this(0, listOf(url))
     }
 

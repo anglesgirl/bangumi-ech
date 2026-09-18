@@ -26,6 +26,12 @@ checks = {
         '        ComposeTextTab("https://xget.xiaoyv.com.cn/pximg/"'
     ) in (ROOT / 'shared/ui/src/commonMain/kotlin/com/xiaoyv/bangumi/shared/ui/composition/TabTokens.kt').read_text(),
 }
+_preview = (ROOT / 'features/preview/main/src/commonMain/kotlin/com/xiaoyv/bangumi/'
+                   'features/preivew/main/PreviewMainScreen.kt')
+_preview_text = _preview.read_text() if _preview.is_file() else ''
+checks['预览页有缩略图占位（不白屏等原图）'] = 'placeholders' in _preview_text \
+    and 'AsyncImage(' in _preview_text and 'placeholder.isNotEmpty()' in _preview_text
+
 for name, passed in checks.items():
     print(f'{name}：实际={"通过" if passed else "失败"}，期望=通过')
 print(f'图源搜索词检查：{sum(checks.values())}/{len(checks)}；不代表运行验证')

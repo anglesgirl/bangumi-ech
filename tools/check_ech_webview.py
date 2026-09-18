@@ -56,6 +56,8 @@ checks = {
         and 'method != "GET" && method != "HEAD"' in client,
     'HEAD 走 head() 且与 JS 桥分工一致': 'builder.head()' in client and 'HEAD' in script_body,
     '响应体交给 WebView 消费（不提前关流）': 'body?.byteStream()' in client and '.use {' not in client,
+    '主文档跳转交给 WebView 自己走（base URL 才不错位）': 'isForMainFrame' in client
+        and 'response.isRedirect' in client and 'location.replace' in client,
     '拦截路径有磁盘缓存（否则每次打开重下一遍）': '.cache(cache)' in transfer
         and 'ech-webview' in transfer and 'Cache(' in transfer,
     '注入脚本只在受保护页面生效': 'if (!BgmEchPolicy.isProtected(host)) return' in script,

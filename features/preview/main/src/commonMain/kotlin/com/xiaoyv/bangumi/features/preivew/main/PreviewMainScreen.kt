@@ -24,6 +24,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImagePainter
 import com.github.panpf.zoomimage.CoilZoomAsyncImage
 import com.xiaoyv.bangumi.core_resource.resources.Res
@@ -140,6 +142,7 @@ private fun PreviewMainScreenContent(
     ) { page ->
         Box(Modifier.fillMaxSize()) {
             var isLoading by remember { mutableStateOf(true) }
+            val placeholder = state.placeholders.getOrNull(page).orEmpty()
 
             CoilZoomAsyncImage(
                 modifier = Modifier.fillMaxSize(),
@@ -150,6 +153,17 @@ private fun PreviewMainScreenContent(
                 },
                 onTap = { onUiEvent(PreviewMainEvent.UI.OnNavUp) }
             )
+
+            // 占位图盖在可缩放图之上（加载期间它自己是不透明背景，画在下面会被盖住）：
+            // 这张多半已在 Coil 磁盘缓存里，所以几乎立刻可见；原图到位后它随之消失。
+            if (isLoading && placeholder.isNotEmpty()) {
+                AsyncImage(
+                    modifier = Modifier.fillMaxSize(),
+                    model = placeholder,
+                    contentScale = ContentScale.Fit,
+                    contentDescription = null,
+                )
+            }
 
             if (isLoading) {
                 BgmProgressIndicator(

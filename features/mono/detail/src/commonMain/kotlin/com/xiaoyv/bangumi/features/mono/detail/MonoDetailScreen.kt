@@ -306,7 +306,16 @@ private fun MonoDetailScreenHeader(
                         )
                         .fillMaxHeight()
                         .aspectRatio(3 / 4f)
-                        .clickable { onUiEvent(MonoDetailEvent.UI.OnNavScreen(Screen.PreviewMain(state.mono.images.displayOriginalUrl))) },
+                        .clickable { onUiEvent(
+                            MonoDetailEvent.UI.OnNavScreen(
+                                // 点开看原图；但先把这张已经缓存的 medium 当占位，别让用户对着白屏等几 MB。
+                                Screen.PreviewMain(
+                                    index = 0,
+                                    items = listOf(state.mono.images.displayOriginalUrl),
+                                    placeholders = listOf(state.mono.images.displayMediumImage),
+                                )
+                            )
+                        ) },
                     shape = MaterialTheme.shapes.small,
                     model = state.mono.images.displayMediumImage,
                     alignment = Alignment.TopCenter,

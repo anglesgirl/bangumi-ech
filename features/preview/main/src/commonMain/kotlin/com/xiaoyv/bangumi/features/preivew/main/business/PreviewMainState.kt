@@ -17,5 +17,7 @@ data class PreviewMainState(
     val index: Int,
     val title: String,
     val items: SerializeList<String> = persistentListOf(),
+    /** 与 [items] 同下标的占位图；加载原图期间先显示它，避免白屏转圈。 */
+    val placeholders: SerializeList<String> = persistentListOf(),
     val contextMenus: PersistentList<ComposeTextTab<Int>> = persistentListOf(),
 )

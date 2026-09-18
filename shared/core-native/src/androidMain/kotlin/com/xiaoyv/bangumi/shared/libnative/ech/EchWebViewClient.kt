@@ -42,8 +42,18 @@ internal class EchWebViewClient : AccompanistWebViewClient() {
                 }
                 runCatching { builder.header(name, value) }
             }
-            val response = EchWebTransfer.client.newCall(builder.build()).execute()
+            val okRequest = builder.build()
+            val response = EchWebTransfer.client.newCall(okRequest).execute()
             try {
+                // 主文档的跳转**不在客户端内部跟随**：那样 WebView 拿到的是 200 最终页，
+                // 却仍以为地址是原来那个 —— 页面里相对路径全部解析错位，表现为"加载很久/半残"。
+                // 改成把 Location 交回页面自己走一次真实跳转：地址与 base URL 才正确，
+                // 且每一跳仍由本拦截器接管，不会泄露 SNI（子资源不动，保持原有内部跟跳）。
+                if (request.isForMainFrame && response.isRedirect) {
+                    val location = response.header("Location")?.let { okRequest.url.resolve(it) }
+                    response.close()
+                    if (location != null) return redirectPage(location.toString())
+                }
                 response.toWebResourceResponse()
             } catch (error: Exception) {
                 response.close()
@@ -67,6 +77,22 @@ internal class EchWebViewClient : AccompanistWebViewClient() {
     override fun onPageFinished(view: WebView, url: String?) {
         super.onPageFinished(view, url)
         EchWebBridgeJs.inject(view, url)
+    }
+
+    /**
+     * 主文档跳转用的最小页面：让 WebView 自己走一次真实跳转。
+     * 直接回 3xx 在拦截式响应里不可靠（WebView 可能当最终响应），所以用 location.replace 兜住。
+     */
+    private fun redirectPage(target: String): WebResourceResponse {
+        val quoted = org.json.JSONObject.quote(target)
+        val html = """<!doctype html><meta charset="utf-8"><title>跳转中</title>
+<script>location.replace($quoted)</script>
+<p>正在跳转… <a href="${target.escapeForHtml()}">如果没有自动跳转，点这里</a></p>"""
+        return WebResourceResponse(
+            "text/html", "utf-8", 200, "OK",
+            mapOf("Cache-Control" to "no-store"),
+            ByteArrayInputStream(html.toByteArray()),
+        )
     }
 
     private fun blockedResponse(reason: String): WebResourceResponse = WebResourceResponse(
