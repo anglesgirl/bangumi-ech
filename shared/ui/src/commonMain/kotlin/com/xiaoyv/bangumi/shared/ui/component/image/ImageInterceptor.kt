@@ -67,6 +67,21 @@ object ImageInterceptor : Interceptor {
             ).proceed()
         }
 
+        // AnimePic：HAR 实测站内请求全带 Referer=站点根 + Accept=image/*
+        if (data.contains("anime-pictures.net")) {
+            return chain.withRequest(
+                chain.request
+                    .newBuilder()
+                    .httpHeaders(
+                        chain.request.httpHeaders.newBuilder()
+                            .set(HttpHeaders.Referrer, "https://anime-pictures.net/")
+                            .set(HttpHeaders.Accept, "image/avif,image/webp,image/*,*/*;q=0.8")
+                            .build()
+                    )
+                    .build()
+            ).proceed()
+        }
+
         // 去除 Bgm.TV 缺省图
         val url = if (blankImageUrlRegex.matches(data)) "" else data
 

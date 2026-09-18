@@ -74,6 +74,11 @@ data class ComposeAnimePictureImage(
 ) {
     private val dir get() = if (md5.orEmpty().length > 3) md5.orEmpty().substring(0, 3) else ""
     val url get() = "https://opreviews.anime-pictures.net/$dir/${md5}_lp.avif"
-    val largeUrl get() = "https://oimages.anime-pictures.net/$dir/$md5$ext"
+    /**
+     * 详情页大图。依据 HAR 实测：站点自己的放大视图用的是 opreviews 的 `_bp.avif`
+     * （26 次请求全 200，14~74KB）；而 oimages 原图必须带 `?if=ANIME-PICTURES.NET_-_<id>-<w>x<h>-<文件名>`
+     * 令牌，缺令牌一律 302 跳首页 —— 上游拼的 URL 正是缺令牌，所以详情页一直出不来图。
+     */
+    val largeUrl get() = "https://opreviews.anime-pictures.net/$dir/${md5}_bp.avif"
 }
 
