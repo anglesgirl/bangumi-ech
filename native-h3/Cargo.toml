@@ -7,10 +7,6 @@ edition = "2021"
 name = "bgm_h3"
 crate-type = ["cdylib", "rlib"]
 
-[[bin]]
-name = "probe"
-path = "src/bin/probe.rs"
-
 [dependencies]
 quiche = { version = "0.22", features = ["boringssl-vendored", "ffi", "pkg-config-meta"] }
 rand = "0.8"
