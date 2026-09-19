@@ -140,11 +140,20 @@ jobs:
           if-no-files-found: ignore
       - name: 保存 R8 混淆映射（把混淆类名还原成真实类名用）
         if: always()
-        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        run: |
+          echo "=== 找 mapping/usage/seeds 实际位置"
+          find . -path ./node_modules -prune -o \( -name 'mapping.txt' -o -name 'usage.txt' -o -name 'seeds.txt' \) -print 2>/dev/null | head -20
+      - uses: actions/upload-artifact@v4
+        if: always()
         continue-on-error: true
         with:
           name: r8-mapping
-          path: android/build/proguard/
+          path: |
+            **/build/proguard/mapping.txt
+            **/build/proguard/usage.txt
+            **/build/proguard/seeds.txt
+            android/build/outputs/mapping/
           if-no-files-found: warn
           retention-days: 14
 
