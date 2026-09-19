@@ -1,7 +1,9 @@
 package com.xiaoyv.bangumi.shared.libnative.ech
 
 import android.util.Base64
+import android.util.Log
 import com.xiaoyv.bangumi.shared.libnative.application
+import okhttp3.Dns
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
@@ -58,6 +60,43 @@ private const val REFERENCE_ECH_HOST = "cloudflare-ech.com"
 
 /** 同一主机后台刷新在线数据的最小间隔，避免网关抖动时反复重试。 */
 private const val REFRESH_MIN_INTERVAL_MILLIS = 60 * 1000L
+
+/** 日志标签。 */
+private const val TAG = "BGM-ECH-DOH"
+
+/**
+ * ECH 活值的候选：**国内三家的纯 IP 端点**（阿里 / 腾讯 / 360，各带一个备份）。
+ *
+ * 为什么用纯 IP：不查 DNS、不被污染、证书直接对 IP 生效（三家实测 HTTPS 均可用）。
+ * 为什么不加 `Host` 头：阿里带 `Host` 会直接失败（实测 http=000）；正确答案就是
+ * "URL 里的 IP 当 Host + `?dns=` 传二进制报文"，所以一律不加 Host 头。
+ * 为什么只认 wire：三家都不支持 `application/dns-json`（阿里/360 回 400 no 'dns' query parameter，
+ * 腾讯回 UrlParameterError），只能发 `application/dns-message`。实测三家取到的活值与 CF 官方逐字节相同。
+ *
+ * 策略：**随机挑一家试，失败换下一家**（不同时打、也不重复打同一家），单家 2.5 秒超时。
+ */
+private val ECH_DOH_IPS = listOf(
+    "223.5.5.5",        // 阿里
+    "223.6.6.6",        // 阿里备用
+    "1.12.12.12",       // 腾讯
+    "120.53.53.53",     // 腾讯备用
+    "101.198.193.29",   // 360
+    "101.198.192.33",   // 360 备用
+)
+
+/** 单家超时：快失败快换下一家，别让冷启动干等。 */
+private const val LIVE_ONE_TIMEOUT_MILLIS = 2500L
+
+/**
+ * 活值的缓存时长：记录的 TTL 只有 ~200 秒，但公钥实测能稳定数天，
+ * 所以至少缓存 1 小时（真正省掉冷启动那次查询），且不超过 5 小时（CF 约 5 小时轮换密钥）。
+ * 万一被轮换，握手被拒会走 [BgmEchDoh.invalidateConfig] 自愈。
+ */
+private const val LIVE_CACHE_MIN_MILLIS = 60 * 60 * 1000L
+private const val LIVE_CACHE_MAX_MILLIS = 5 * 60 * 60 * 1000L
+
+/** 活值整条链路都拿不到时的短冷却（只在内存里）：避免并发预热把同一批 IP 反复打一遍。 */
+private const val LIVE_FAIL_COOLDOWN_MILLIS = 30 * 1000L
 
 /** DNS-over-HTTPS 响应里的 ECH 字段。 */
 private val REGEX_ECH = Regex("(?:^|\\s)ech=\"?([A-Za-z0-9+/=]+)")
@@ -175,6 +214,9 @@ internal object BgmEchDoh {
         synchronized(lockFor(REFERENCE_ECH_HOST)) {
             configs.remove(REFERENCE_ECH_HOST)
             hints.remove(REFERENCE_ECH_HOST)
+            // 活值内存缓存也要丢：它可能正是被服务器拒的那一份。
+            liveEntry = null
+            BgmEchState.drop(REFERENCE_ECH_HOST)
             preferences.edit()
                 .remove("cfg:$REFERENCE_ECH_HOST").remove("cfg:$REFERENCE_ECH_HOST.at")
                 .remove("hint:$REFERENCE_ECH_HOST").remove("hint:$REFERENCE_ECH_HOST.at")
@@ -183,6 +225,7 @@ internal object BgmEchDoh {
         synchronized(lockFor(host)) {
             configs.remove(host)
             hints.remove(host)
+            BgmEchState.drop(host)
             preferences.edit()
                 .remove("cfg:$host").remove("cfg:$host.at")
                 .remove("hint:$host").remove("hint:$host.at")
@@ -260,6 +303,8 @@ internal object BgmEchDoh {
      */
     fun warmUp(hostnames: Collection<String>) {
         if (!warmedUp.compareAndSet(false, true)) return
+        // 活值先预热一次：官方源那份配置是所有受保护域名共用的（并发取也只打一次，见 fetchLiveEch 的单飞）。
+        runCatching { warmUpPool.execute { runCatching { fetchLiveEch() } } }
         hostnames.forEach { hostname ->
             runCatching {
                 warmUpPool.execute {
@@ -320,10 +365,192 @@ internal object BgmEchDoh {
     private fun persistConfig(host: String, config: ByteArray) {
         configs[host] = Entry(config, now() + 300_000L)
         persist("cfg:$host", Base64.encodeToString(config, Base64.DEFAULT))
+        // 专用落盘（`ech_state`）：冷启动直接复用活值，不必再等一次 DoH。
+        BgmEchState.save(host, config, CACHED_CONFIG_MAX_AGE_MILLIS)
+    }
+
+    // ---------------- 活值：国内三家纯 IP（wire 格式） ----------------
+
+    /**
+     * 一次活值查询的结果。
+     * [wire] 含 2 字节长度前缀，可直接喂 Conscrypt；[hints] 是同一个 SVCB 记录里的 ipv4hint。
+     */
+    private class LiveEch(val wire: ByteArray, val hints: List<InetAddress>, val ttlMillis: Long)
+
+    /** 活值的内存缓存与失败时间戳（纯内存：重启后重取一次即可，不往磁盘写冷却）。 */
+    @Volatile
+    private var liveEntry: Entry<LiveEch>? = null
+
+    @Volatile
+    private var liveFailedAt = 0L
+
+    private val liveLock = Any()
+
+    /** 纯 IP 查询用的短超时客户端：不查系统 DNS（URL 里的 host 就是 IP）、不打代理、不重试。 */
+    private val liveClient by lazy {
+        OkHttpClient.Builder()
+            .dns(object : Dns {
+                // URL 里的 host 就是纯 IP：这里只把字面量变成 InetAddress，**永远不查系统 DNS**（污染源）。
+                override fun lookup(hostname: String): List<InetAddress> = listOf(parseIpv4Literal(hostname))
+            })
+            .proxy(java.net.Proxy.NO_PROXY)
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .retryOnConnectionFailure(false)
+            .connectTimeout(LIVE_ONE_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)
+            .readTimeout(LIVE_ONE_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)
+            .callTimeout(LIVE_ONE_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)
+            .build()
+    }
+
+    /**
+     * 取官方源的 ECH 活值。
+     *
+     * 单飞（synchronized + 双检 + 失败短冷却）：预热是并发的，这里保证同一时刻只打一家，
+     * 不会把同一家重复打；拿到的值立刻进内存缓存、落盘缓存与官方源名下。
+     */
+    private fun fetchLiveEch(): ByteArray? {
+        liveEntry?.let { if (it.until > now()) return it.value.wire }
+        if (now() - liveFailedAt < LIVE_FAIL_COOLDOWN_MILLIS) return null
+        synchronized(liveLock) {
+            liveEntry?.let { if (it.until > now()) return it.value.wire }
+            val hit = queryLiveEch()
+            if (hit == null) {
+                liveFailedAt = now()
+                return null
+            }
+            val ttlMillis = hit.ttlMillis
+            liveEntry = Entry(hit, now() + ttlMillis)
+            // 成功值同时记到官方源名下，这样 adoptConfig 能把它（连 hints）复制给目标域名。
+            if (hit.hints.isNotEmpty()) {
+                hints[REFERENCE_ECH_HOST] = Entry(hit.hints, now() + ttlMillis)
+                persist("hint:$REFERENCE_ECH_HOST", hit.hints.joinToString(",") { it.hostAddress })
+            }
+            configs[REFERENCE_ECH_HOST] = Entry(hit.wire, now() + ttlMillis)
+            persist("cfg:$REFERENCE_ECH_HOST", Base64.encodeToString(hit.wire, Base64.DEFAULT))
+            BgmEchState.save(REFERENCE_ECH_HOST, hit.wire, ttlMillis)
+            return hit.wire
+        }
+    }
+
+    /** 随机挑一家纯 IP 取活值；这家不行换下一家（顺序每轮重新打乱）。 */
+    private fun queryLiveEch(): LiveEch? {
+        for (ip in ECH_DOH_IPS.shuffled()) {
+            val hit = runCatching { queryEchWire(ip, REFERENCE_ECH_HOST) }.getOrNull()
+            if (hit != null) {
+                Log.i(TAG, "live ech via $ip: ${hit.wire.size} bytes, ttl=${hit.ttlMillis}ms, hints=${hit.hints.size}")
+                return hit
+            }
+            Log.i(TAG, "live ech via $ip failed, next")
+        }
+        Log.i(TAG, "live ech unavailable: ${ECH_DOH_IPS.size} domestic ips all failed")
+        return null
+    }
+
+    /** 纯 IP + wire 的 DoH 查询（`?dns=<base64url>`，无 Host 头）。 */
+    private fun queryEchWire(ip: String, name: String): LiveEch? {
+        val question = Base64.encodeToString(
+            buildQuery(name),
+            Base64.NO_WRAP or Base64.URL_SAFE,
+        ).trimEnd('=')
+        // 绝不加 Host 头：阿里带 Host 直接失败（实测 http=000）；URL 的 host 就是 IP，证书对 IP 有效。
+        val request = Request.Builder()
+            .url("https://$ip/dns-query?dns=$question")
+            .header("Accept", "application/dns-message")
+            .build()
+        val message = liveClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return null
+            response.body?.bytes() ?: return null
+        }
+        return parseSvcbEch(message)
+    }
+
+    /** 建 DNS 查询报文（ID + 标志 + 1 个问题，type 65 = HTTPS）。 */
+    private fun buildQuery(name: String): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        out.write(byteArrayOf(0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0))
+        name.split('.').forEach { label ->
+            out.write(label.length)
+            out.write(label.toByteArray(Charsets.US_ASCII))
+        }
+        out.write(0)
+        out.write(byteArrayOf(0x00, 65, 0x00, 0x01))
+        return out.toByteArray()
+    }
+
+    /**
+     * 解析 DNS 应答，找 type=65 的 HTTPS 记录，走 SvcParams 取 key=5（ech）与 key=4（ipv4hint）。
+     * 返回的 ech 字节**含 2 字节长度前缀**，可直接喂 Conscrypt（实测以 0x00 0x45 开头，0x45=69）。
+     */
+    private fun parseSvcbEch(message: ByteArray): LiveEch? {
+        if (message.size < 12) return null
+        if ((message[3].toInt() and 0x0F) != 0) return null // rcode != NOERROR
+        var index = 12
+        while (index < message.size && message[index].toInt() != 0) {
+            index += (message[index].toInt() and 0xFF) + 1
+        }
+        index += 5 // 跳过 question 的根标签 + qtype + qclass
+        val answers = ((message[6].toInt() and 0xFF) shl 8) or (message[7].toInt() and 0xFF)
+        for (n in 0 until answers) {
+            if (index + 12 > message.size) return null
+            if ((message[index].toInt() and 0xC0) == 0xC0) {
+                index += 2
+            } else {
+                while (index < message.size && message[index].toInt() != 0) {
+                    index += (message[index].toInt() and 0xFF) + 1
+                }
+                index += 1
+            }
+            val type = ((message[index].toInt() and 0xFF) shl 8) or (message[index + 1].toInt() and 0xFF)
+            val ttl = ((message[index + 4].toInt() and 0xFF).toLong() shl 24) or
+                ((message[index + 5].toInt() and 0xFF).toLong() shl 16) or
+                ((message[index + 6].toInt() and 0xFF).toLong() shl 8) or
+                (message[index + 7].toInt() and 0xFF).toLong()
+            val length = ((message[index + 8].toInt() and 0xFF) shl 8) or (message[index + 9].toInt() and 0xFF)
+            val rdata = index + 10
+            if (type == 65 && length > 4 && rdata + length <= message.size) {
+                // SVCB: priority(2) + target(域名) + SvcParams
+                var cursor = rdata + 2
+                while (cursor < rdata + length && message[cursor].toInt() != 0) {
+                    cursor += (message[cursor].toInt() and 0xFF) + 1
+                }
+                cursor += 1
+                var found: ByteArray? = null
+                val parsedHints = mutableListOf<InetAddress>()
+                while (cursor + 4 <= rdata + length) {
+                    val key = ((message[cursor].toInt() and 0xFF) shl 8) or (message[cursor + 1].toInt() and 0xFF)
+                    val size = ((message[cursor + 2].toInt() and 0xFF) shl 8) or (message[cursor + 3].toInt() and 0xFF)
+                    if (key == 5 && size > 0 && cursor + 4 + size <= rdata + length) {
+                        found = message.copyOfRange(cursor + 4, cursor + 4 + size)
+                    } else if (key == 4 && size >= 4 && cursor + 4 + size <= rdata + length) {
+                        var address = cursor + 4
+                        while (address + 4 <= cursor + 4 + size) {
+                            val literal = "${message[address].toInt() and 0xFF}.${message[address + 1].toInt() and 0xFF}." +
+                                "${message[address + 2].toInt() and 0xFF}.${message[address + 3].toInt() and 0xFF}"
+                            runCatching { parseIpv4Literal(literal) }.getOrNull()?.let { parsedHints += it }
+                            address += 4
+                        }
+                    }
+                    cursor += 4 + size
+                }
+                val wire = found
+                if (wire != null && runCatching { validateConfig(wire) }.isSuccess) {
+                    val ttlMillis = (ttl * 1000L).coerceIn(LIVE_CACHE_MIN_MILLIS, LIVE_CACHE_MAX_MILLIS - 1) + 1
+                    return LiveEch(wire, parsedHints.distinct(), ttlMillis)
+                }
+            }
+            index = rdata + length
+        }
+        return null
     }
 
     /** 从网关按域名取 ECH 记录（含 ipv4hint）并落盘。 */
     private fun fetchConfigFromGateway(host: String, bestEffort: Boolean): ByteArray {
+        // 官方活源先走国内三家纯 IP（wire，实测与 CF 官方逐字节相同）；三家都不通才回退原有的网关 JSON 链路。
+        // 这一步刻意放在 guarded 之外：冷却/退避是给网关池的，别把纯 IP 这条更快的路一起冻住。
+        if (host == REFERENCE_ECH_HOST) {
+            fetchLiveEch()?.let { live -> return live }
+        }
         val pool = endpoints
         return guarded(bestEffort) {
             val json = fetch(pool, host, "HTTPS")
@@ -427,7 +654,9 @@ internal object BgmEchDoh {
         }?.takeIf { it.isNotEmpty() }
 
     private fun persistedConfig(host: String): ByteArray? =
-        persisted("cfg:$host", CACHED_CONFIG_MAX_AGE_MILLIS)
+        // 先看专用落盘（`ech_state`）；没有或已过期再退回 `ech_doh_state` 里的旧键。
+        BgmEchState.load(host)?.takeIf { runCatching { validateConfig(it) }.isSuccess }
+            ?: persisted("cfg:$host", CACHED_CONFIG_MAX_AGE_MILLIS)
             ?.let { runCatching { Base64.decode(it, Base64.DEFAULT) }.getOrNull() }
             ?.takeIf { runCatching { validateConfig(it) }.isSuccess }
 

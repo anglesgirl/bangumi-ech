@@ -8,6 +8,7 @@ def read(path):
     return path.read_text() if path.exists() else ''
 transport = read(native / 'ech/BgmEchTransport.kt')
 doh = read(native / 'ech/BgmEchDoh.kt')
+state = read(native / 'ech/BgmEchState.kt')
 system = read(native / 'System.android.kt')
 app = read(native / 'AppApplication.kt')
 checks = {
@@ -74,6 +75,19 @@ checks = {
     '失败冷却持久化': 'putLong("blocked_until",' in doh and '300_000L' in doh,
     '无写死 ECH 配置': 'Base64.decode' in doh and 'fetch(pool, host, "HTTPS")' in doh,
     'IP 响应先校验再解析': 'parseIpv4Literal' in doh and 'InetAddress.getByAddress' in doh,
+    # ECH 活值：国内三家的纯 IP 端点（wire 格式、不带 Host 头），随机挑一家、失败换下一家；
+    # 三家都不通才回落到原有网关 JSON 链路。
+    '活值走国内三家纯 IP': 'ECH_DOH_IPS' in doh and all(ip in doh for ip in (
+        '223.5.5.5', '223.6.6.6', '1.12.12.12', '120.53.53.53', '101.198.193.29', '101.198.192.33')),
+    '活值随机挑一家、失败换下一家': 'ECH_DOH_IPS.shuffled()' in doh and 'live ech via' in doh,
+    '活值只认 wire 且仍保留网关 JSON 链路': 'application/dns-message' in doh
+        and 'application/dns-json' in doh and 'LIVE_ONE_TIMEOUT_MILLIS' in doh,
+    '活值优先、失败才回落网关': 'fetchLiveEch()?.let { live -> return live }' in doh,
+    '活值单飞（并发预热不重复打同一家）': 'synchronized(liveLock)' in doh and 'liveFailedAt' in doh,
+    'ECH 配置落盘到 ech_state': '"ech_state"' in state
+        and 'BgmEchState.save' in doh and 'BgmEchState.load' in doh,
+    '被拒时连 ech_state 一起丢': 'BgmEchState.drop' in doh,
+    '启动时挂载落盘仓并预热': 'BgmEchState.attach(this)' in app,
 }
 for name, passed in checks.items():
     print(f'{name}：实际={"通过" if passed else "失败"}，期望=通过')
