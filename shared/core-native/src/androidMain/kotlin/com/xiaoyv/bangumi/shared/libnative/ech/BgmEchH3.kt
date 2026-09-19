@@ -99,8 +99,38 @@ object BgmEchH3 {
      * 走 H3 可能拿到 200 + 非图片内容，Coil 解不出 → 黑屏。宁可不接管。
      */
     /** 防盗链 Referer：只有确实要求的站点才加（site 后缀 → Referer） */
-    /** H3 只接管的图床（见 fetchImageToFile 里的实测依据） */
-    private val H3_HOSTS = listOf("i.pximg.net")
+    /**
+     * H3 可用性记忆（落盘）。策略：**默认每个域名都先试 H3** —— 服务端到底支不支持
+     * 由实测决定，不写死白名单（写死会漏掉后来才开 H3 的站点，也会白试已知不行的）。
+     *
+     * 失败一次就把该域名记入**负缓存**（[H3_FAIL_TTL_MS] 内直接走 H2/TCP+ECH，不再白试）；
+     * 成功后清掉负缓存。TTL 过期会再试一次 —— 服务端可能后来才启用 H3。
+     *
+     * 实测过的"不支持"案例（现已由负缓存自动学会，不再写死）：
+     *   lain.bgm.tv —— CF 侧未启用 H3，握手 alert 40
+     *   AnimePic CDN —— 自身拦非浏览器请求（403 拦截页 / 302）
+     */
+    private const val H3_STATE_PREFS = "ech_h3_state"
+    private const val H3_FAIL_TTL_MS = 24 * 60 * 60 * 1000L
+
+    private fun h3Prefs(context: Context) =
+        context.applicationContext.getSharedPreferences(H3_STATE_PREFS, Context.MODE_PRIVATE)
+
+    /** 是否该先试 H3：只要没被负缓存拦下就算可用。 */
+    private fun shouldTryH3(context: Context, host: String): Boolean {
+        val until = runCatching { h3Prefs(context).getLong("bad:$host", 0L) }.getOrDefault(0L)
+        return System.currentTimeMillis() >= until
+    }
+
+    private fun rememberH3(context: Context, host: String, ok: Boolean, why: String = "") {
+        runCatching {
+            h3Prefs(context).edit()
+                .putLong("bad:$host", if (ok) 0L else System.currentTimeMillis() + H3_FAIL_TTL_MS)
+                .apply()
+        }
+        if (ok) Log.i(TAG, "H3 可用，已记住: $host")
+        else Log.i(TAG, "H3 不通，已记负缓存 ${H3_FAIL_TTL_MS / 3600000}h，改走 H2: $host ($why)")
+    }
 
     private val REFERERS = listOf(
         "pximg.net" to "https://www.pixiv.net/",
@@ -165,11 +195,13 @@ object BgmEchH3 {
             return null
         }
         val host = uri.host ?: return null
-        // 只接管 pixiv 官方图床。实测依据（今天逐条复现）：
-        //   AnimePic CDN 自身拦非浏览器请求 → 403 拦截页 / 302（用真实 IP 直连同样如此）
+        // 策略：默认所有域名都先试 H3；不支持的会失败一次并被记入负缓存，24h 内直接走 H2。
+        // 已知会失败的两类（现已由负缓存自动学会，无需写死）：
+        //   AnimePic CDN 自身拦非浏览器请求 → 403 拦截页 / 302（真实 IP 直连同样如此）
         //   lain.bgm.tv 在 CF 侧未启用 H3 → 握手 alert 40
-        // 这两类走 H3 只会白试一次，交给原链路（自带 UA/Accept/Referer）更稳。
-        if (!H3_HOSTS.any { host == it || host.endsWith(".$it") }) return null
+        // 失败即回落原链路（自带 UA/Accept/Referer），用户无感。
+        // 默认所有域名都先试 H3；只有被负缓存记过的才直接走 H2。
+        if (!shouldTryH3(context, host)) return null
         val ip = runCatching { BgmEchDoh.resolve(host).firstOrNull()?.hostAddress }.getOrNull()
             ?: run { report(host, "DoH 未解析出 IP"); return null }
         val ech = runCatching { BgmEchDoh.echConfig(host) }.getOrNull()
@@ -186,15 +218,18 @@ object BgmEchH3 {
         val ok = fetchToFile(context, host, ip, ech, pathWithQuery, referer, out)
         if (ok == null) {
             report(host, "H3 未取回（ech=" + (ech?.size ?: 0) + "B, ip=" + ip + "）")
+            rememberH3(context, host, false, "取回失败")
             out.delete()
             return null
         }
         report(host, "H3 成功：" + ok.length() + "B 扩展名=" + ok.extension)
         if (!looksLikeImage(ok)) {
             report(host, "H3 返回的不是图片（疑似拦截页/HTML），已回落原链路")
+            rememberH3(context, host, false, "返回非图片")
             ok.delete()
             return null
         }
+        rememberH3(context, host, true)
         return ok
     }
 
