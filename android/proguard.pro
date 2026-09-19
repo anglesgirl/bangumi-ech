@@ -6,6 +6,21 @@
 # Repackage classes to bgm
 -repackageclasses bgm
 
+# ---- kotlinx.serialization ----
+# 注意：-repackageclasses 会把所有类搬进 bgm 包，而库自带的 keep 规则是按包名写的，
+# 搬运后全部失效 → 运行时抛 "Serializer for class 'xxx' is not found"（发帖等写操作必崩）。
+# 所以这里用不依赖包名的方式保留序列化器与 Companion。
+-keepattributes *Annotation*, InnerClasses
+-dontnote kotlinx.serialization.**
+-keep class kotlinx.serialization.** { *; }
+-keep,includedescriptorclasses class **$$serializer { *; }
+-keepclassmembers class ** {
+    *** Companion;
+}
+-keepclasseswithmembers class ** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
 # Lists classes and members that are not confused
 -printseeds build/proguard/seeds.txt
 # List the code that was removed from the apk
