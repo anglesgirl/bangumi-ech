@@ -138,6 +138,16 @@ jobs:
             runner-resources.log
           retention-days: 3
           if-no-files-found: ignore
+      - name: 保存 R8 混淆映射（把混淆类名还原成真实类名用）
+        if: always()
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: r8-mapping
+          path: android/build/proguard/
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: 保存私有正式包
         env:
           GH_TOKEN: ${{ github.token }}

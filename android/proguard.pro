@@ -17,6 +17,8 @@
 -keepclassmembers class ** {
     *** Companion;
 }
+# 只 keep Companion 字段不够：序列化器是通过 Companion 的 serializer() 拿的
+-keep class **$Companion { *; }
 -keepclasseswithmembers class ** {
     kotlinx.serialization.KSerializer serializer(...);
 }
