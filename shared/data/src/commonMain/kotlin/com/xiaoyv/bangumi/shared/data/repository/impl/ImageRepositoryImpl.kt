@@ -13,13 +13,16 @@ import com.xiaoyv.bangumi.shared.core.utils.toApiPage
 import com.xiaoyv.bangumi.shared.data.api.client.ApiClient
 import com.xiaoyv.bangumi.shared.data.model.request.list.album.ListAlbumParam
 import com.xiaoyv.bangumi.shared.data.model.response.bgm.ComposeMono
+import com.xiaoyv.bangumi.shared.data.model.response.image.ComposeAnimePictureImage
 import com.xiaoyv.bangumi.shared.data.model.response.image.ComposeGallery
 import com.xiaoyv.bangumi.shared.data.parser.bgm.SubjectParser
 import com.xiaoyv.bangumi.shared.data.repository.ImageRepository
 import com.xiaoyv.bangumi.shared.data.repository.datasource.MemoryPagingController
 import com.xiaoyv.bangumi.shared.data.repository.datasource.createMemoryPageLimitPagingController
 import com.xiaoyv.bangumi.shared.data.repository.datasource.createMemoryStepUniquePagingController
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
@@ -35,6 +38,9 @@ class ImageRepositoryImpl(
     private val pagingConfig: PagingConfig,
     private val subjectParser: SubjectParser,
 ) : ImageRepository {
+
+    /** 解析 Anime-Pictures 详情用：宽容未知字段，避免接口加字段就解析失败 */
+    private val detailJson = Json { ignoreUnknownKeys = true; isLenient = true }
 
     override fun fetchAlbumPager(param: ListAlbumParam): MemoryPagingController<ComposeGallery, String> {
         return createMemoryPageLimitPagingController(
@@ -153,6 +159,27 @@ class ImageRepositoryImpl(
         }
     }
 
+
+    override suspend fun fetchAnimePictureDetail(id: String): Result<List<ComposeGallery>> =
+        runResult {
+            val body = client.imageApi.fetchAnimePictureDetail(id)
+            // 兼容两种返回形态：扁平帖子本体 / 包一层 {"post": {...}}
+            val image = body["post"]
+                ?.let { detailJson.decodeFromJsonElement<ComposeAnimePictureImage>(it) }
+                ?: detailJson.decodeFromJsonElement(body)
+            listOf(
+                ComposeGallery(
+                    id = image.id,
+                    type = ListAlbumType.ANIME_PICTURES,
+                    image = image.url,
+                    original = image.largeUrl,
+                    width = image.width,
+                    height = image.height,
+                    size = image.size,
+                    count = 1,
+                )
+            )
+        }
 
     override suspend fun fetchPixivPictureDetail(id: String): Result<List<ComposeGallery>> =
         runResult {

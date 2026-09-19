@@ -19,6 +19,8 @@ class ImageRepoUseCase(
     ): Result<List<ComposeGallery>> {
         return when (type) {
             ListAlbumType.PIVIX -> imageRepository.fetchPixivPictureDetail(id)
+            // 原实现 else 一律 emptyList()，导致 AnimePic 点进去永远是空页面
+            ListAlbumType.ANIME_PICTURES -> imageRepository.fetchAnimePictureDetail(id)
             else -> Result.success(emptyList())
         }
     }

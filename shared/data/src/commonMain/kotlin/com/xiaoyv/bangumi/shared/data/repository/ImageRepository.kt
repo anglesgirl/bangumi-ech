@@ -23,6 +23,9 @@ interface ImageRepository {
 
     suspend fun fetchAlbumList(param: ListAlbumParam, page: Int, size: Int): Result<List<ComposeGallery>>
 
+    /** Anime-Pictures 单帖详情：详情页只拿到 id，需要按 id 取回帖子本身 */
+    suspend fun fetchAnimePictureDetail(id: String): Result<List<ComposeGallery>>
+
     suspend fun fetchPixivPictureDetail(id: String): Result<List<ComposeGallery>>
 
     suspend fun fetchAnimePictureTag(data: ComposeMono): Result<List<String>>
