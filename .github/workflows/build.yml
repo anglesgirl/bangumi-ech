@@ -3,9 +3,9 @@ name: Compose Multiplatform CI
 on:
   push:
     tags: [ 'v*' ]
-  schedule:
-    # GitHub Actions cron uses UTC: 21:00 UTC is 05:00 in Asia/Shanghai.
-    - cron: '0 21 * * *'
+  # ⚠️ 定时触发已于 2026-09-30 移除：这是私有仓库，Actions 需要计费，账号计费
+  # 失败时每个 cron 周期都会跑失败并给作者发通知（job 一步都没启动）。改回
+  # 手动 / 打 tag 触发。要恢复定时构建，先解决计费或把仓库改为公开。
   workflow_dispatch:
 
 concurrency:
