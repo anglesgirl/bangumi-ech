@@ -1,6 +1,7 @@
 package com.xiaoyv.bangumi.shared.libnative.ech
 
 import android.content.Context
+import android.util.Base64
 import android.util.Log
 import dev.kathttp3.DohResolver
 import dev.kathttp3.KatHttp3Client
