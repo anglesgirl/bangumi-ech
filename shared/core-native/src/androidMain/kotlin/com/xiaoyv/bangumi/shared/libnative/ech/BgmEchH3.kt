@@ -192,9 +192,6 @@ object BgmEchH3 {
             }
         }.start()
     }
-            null
-        }
-    }
 
     /**
      * 对外唯一入口：受保护图片域的 H3+ECH 拉取并落盘。
