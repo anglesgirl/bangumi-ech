@@ -135,6 +135,12 @@
     <string name="global_index">目录</string>
     <string name="global_book">书籍</string>
     <string name="global_anime">动画</string>
+    <string name="global_anime_cat_all">全部</string>
+    <string name="global_anime_cat_tv">TV</string>
+    <string name="global_anime_cat_web">WEB</string>
+    <string name="global_anime_cat_ova">OVA</string>
+    <string name="global_anime_cat_movie">剧场版</string>
+    <string name="global_anime_cat_other">其他</string>
     <string name="global_game">游戏</string>
     <string name="global_comments_cnt">讨论%1$d</string>
     <string name="global_real">三次元</string>

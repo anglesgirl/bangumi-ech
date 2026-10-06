@@ -39,6 +39,7 @@ import com.xiaoyv.bangumi.features.subject.browser.business.SubjectBrowserViewMo
 import com.xiaoyv.bangumi.features.subject.page.SubjectPageRoute
 import com.xiaoyv.bangumi.shared.core.mvi.UiState
 import com.xiaoyv.bangumi.shared.core.types.SubjectSortBrowserType
+import com.xiaoyv.bangumi.shared.core.types.SubjectType
 import com.xiaoyv.bangumi.shared.data.manager.shared.LocalHideNavIcon
 import com.xiaoyv.bangumi.shared.ui.component.bar.BgmTopAppBar
 import com.xiaoyv.bangumi.shared.ui.component.chip.DropMenuChip
@@ -175,6 +176,22 @@ private fun SubjectBrowserScreenContent(
                     )
                 }
             )
+
+            // 动画子类型筛选（TV/WEB/OVA/剧场版），仅动画类型时显示
+            if (param.browser.subjectType == SubjectType.ANIME) {
+                DropMenuChip(
+                    labelPrefix = stringResource(Res.string.global_kind),
+                    current = param.browser.cat,
+                    options = TabTokens.subjectAnimeCategoryTabs,
+                    onOptionClick = {
+                        onActionEvent(
+                            SubjectBrowserEvent.Action.OnUpdateBrowserSubjectParam(
+                                body = param.browser.copy(cat = it.type)
+                            )
+                        )
+                    }
+                )
+            }
 
             // 是否隐藏排序过滤项，比如需要固定显示某些排序时，需要隐藏
             if (!state.param.browser.hideSortFilter) DropMenuChip(

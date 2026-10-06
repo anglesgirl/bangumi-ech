@@ -197,7 +197,6 @@ fun HomeMainAction(
                                             body = SubjectBrowserBody(
                                                 sort = SubjectSortBrowserType.RANK,
                                                 subjectType = SubjectType.ANIME,
-                                                hideSortFilter = true
                                             ),
                                             title = getString(Res.string.global_rank),
                                         )

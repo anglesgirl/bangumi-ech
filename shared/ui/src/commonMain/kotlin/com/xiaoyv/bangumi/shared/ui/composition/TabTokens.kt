@@ -33,6 +33,12 @@ import com.xiaoyv.bangumi.core_resource.resources.calendar_tuesday
 import com.xiaoyv.bangumi.core_resource.resources.calendar_wednesday
 import com.xiaoyv.bangumi.core_resource.resources.global_all
 import com.xiaoyv.bangumi.core_resource.resources.global_anime
+import com.xiaoyv.bangumi.core_resource.resources.global_anime_cat_all
+import com.xiaoyv.bangumi.core_resource.resources.global_anime_cat_movie
+import com.xiaoyv.bangumi.core_resource.resources.global_anime_cat_other
+import com.xiaoyv.bangumi.core_resource.resources.global_anime_cat_ova
+import com.xiaoyv.bangumi.core_resource.resources.global_anime_cat_tv
+import com.xiaoyv.bangumi.core_resource.resources.global_anime_cat_web
 import com.xiaoyv.bangumi.core_resource.resources.global_blog
 import com.xiaoyv.bangumi.core_resource.resources.global_book
 import com.xiaoyv.bangumi.core_resource.resources.global_game
@@ -135,6 +141,7 @@ import com.xiaoyv.bangumi.shared.core.types.MagnetGardenType
 import com.xiaoyv.bangumi.shared.core.types.MonoCastType
 import com.xiaoyv.bangumi.shared.core.types.ReportReason
 import com.xiaoyv.bangumi.shared.core.types.SubjectSortBrowserType
+import com.xiaoyv.bangumi.shared.core.types.SubjectCategory
 import com.xiaoyv.bangumi.shared.core.types.SubjectType
 import com.xiaoyv.bangumi.shared.core.types.TimelineCat
 import com.xiaoyv.bangumi.shared.core.types.TimelineTab
@@ -249,6 +256,19 @@ object TabTokens {
         ComposeTextTab(SubjectType.MUSIC, Res.string.global_music),
         ComposeTextTab(SubjectType.GAME, Res.string.global_game),
         ComposeTextTab(SubjectType.REAL, Res.string.global_real),
+    )
+
+    /**
+     * 动画子类型筛选（对应 API 的 cat 参数）
+     * @see com.xiaoyv.bangumi.shared.core.types.SubjectCategory.SubjectAnimeCategory
+     */
+    val subjectAnimeCategoryTabs = persistentListOf(
+        ComposeTextTab(0, Res.string.global_anime_cat_all),
+        ComposeTextTab(SubjectCategory.SubjectAnimeCategory.TV.value, Res.string.global_anime_cat_tv),
+        ComposeTextTab(SubjectCategory.SubjectAnimeCategory.WEB.value, Res.string.global_anime_cat_web),
+        ComposeTextTab(SubjectCategory.SubjectAnimeCategory.OVA.value, Res.string.global_anime_cat_ova),
+        ComposeTextTab(SubjectCategory.SubjectAnimeCategory.MOVIE.value, Res.string.global_anime_cat_movie),
+        ComposeTextTab(SubjectCategory.SubjectAnimeCategory.OTHER.value, Res.string.global_anime_cat_other),
     )
 
     val subjectBrowserSortTabs = persistentListOf(
