@@ -54,7 +54,10 @@ kotlin {
             // 安卓 ECH 策略依赖；不改变 JVM 的 Conscrypt 版本。
             implementation("org.conscrypt:conscrypt-android:2.7.0")
             // kathttp3: ngtcp2-based H3 with native BoringSSL ECH (local AAR, prebuilt)
-            implementation(files("../../../libs/kathttp3-release.aar"))
+            // 注意：用 rootProject.file 锚定仓库根目录，相对路径 files() 在 KMP
+            // androidMain 依赖里是按模块目录解析的，多写/少写一个 ../ 就会在 CI 上找不到文件
+            // （2026-10-06 run 37467862117：../../../ 解析到了仓库父目录导致构建失败）
+            implementation(files(rootProject.file("libs/kathttp3-release.aar")))
         }
 
         iosMain.dependencies {
