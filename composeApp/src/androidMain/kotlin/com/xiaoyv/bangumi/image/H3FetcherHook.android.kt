@@ -65,8 +65,11 @@ internal class H3ImageFetcher(
 ) : Fetcher {
 
     override suspend fun fetch(): FetchResult {
+        val t0 = System.currentTimeMillis()
         val hit = runCatching { tryH3() }.getOrNull()
         if (hit != null) {
+            val dt = System.currentTimeMillis() - t0
+            BgmEchH3.logState(options.context, hostOf(url), "h3_success", dt, url)
             return SourceFetchResult(
                 source = ImageSource(
                     source = FileSystem.SYSTEM.source(hit.absoluteFile.toOkioPath()).buffer(),
@@ -76,12 +79,18 @@ internal class H3ImageFetcher(
                 dataSource = DataSource.NETWORK,
             )
         }
+        // H3 没拿到，走兜底（H2/TCP）
+        BgmEchH3.logState(options.context, hostOf(url), "fallback", System.currentTimeMillis() - t0, url)
         return fallback?.fetch() ?: throw IllegalStateException("H3 与兜底链路均不可用")
     }
 
     private fun tryH3(): File? {
         val host = hostOf(url)
-        if (H3Breaker.isOpen(host)) return null // 刚连续失败过：这段时间直接用 TCP
+        if (H3Breaker.isOpen(host)) {
+            BgmEchH3.logState(options.context, host, "h3_skip_breaker", 0, url)
+            return null // 刚连续失败过：这段时间直接用 TCP
+        }
+        BgmEchH3.logState(options.context, host, "h3_attempt", 0, url)
         // 域名是否受保护、IP/ECH 怎么取，都在 core-native 的门面里判定
         val file = BgmEchH3.fetchImageToFile(options.context, url)
         if (file != null) {

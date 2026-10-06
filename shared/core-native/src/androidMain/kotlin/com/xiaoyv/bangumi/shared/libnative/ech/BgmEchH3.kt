@@ -119,6 +119,36 @@ object BgmEchH3 {
         }
     }
 
+    /** 图片加载状态上报（给 H3FetcherHook 用）：h3_attempt / h3_skip_breaker / h3_success / fallback */
+    fun logState(context: Context, host: String, state: String, durationMs: Long, url: String) {
+        val diag = diagUrl(context)
+        Thread {
+            runCatching {
+                val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
+                    .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+                val json = org.json.JSONObject()
+                    .put("app", "bangumi-ech")
+                    .put("event", "h3-state")
+                    .put("timestamp", fmt.format(java.util.Date()))
+                    .put("host", host)
+                    .put("state", state)
+                    .put("duration_ms", durationMs)
+                    .put("url", url.take(200))
+                    .put("engine", "kathttp3")
+                val c = (java.net.URL(diag).openConnection() as java.net.HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                }
+                c.outputStream.use { it.write(json.toString().toByteArray()) }
+                c.responseCode
+                c.disconnect()
+            }
+        }.start()
+    }
+
     /** 详细计时上报（测试用：不做 60s 限流，每条都发） */
     private fun reportTiming(
         context: Context,
