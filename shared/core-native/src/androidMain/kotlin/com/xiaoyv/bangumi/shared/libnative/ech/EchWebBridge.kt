@@ -66,13 +66,22 @@ internal class EchWebBridge(private val view: WebView) {
 
         var contentType: MediaType? = null
         val builder = Request.Builder().url(url)
+        var hasReferer = false
         json.optJSONObject("headers")?.let { headers ->
             headers.keys().forEach { name ->
                 // Cookie 由 CookieJar 从 CookieManager 取；逐跳头与长度由客户端自己定。
                 if (BLOCKED_HEADERS.any { it.equals(name, ignoreCase = true) }) return@forEach
                 val value = headers.optString(name)
                 if (name.equals("Content-Type", ignoreCase = true)) contentType = value.toMediaTypeOrNull()
+                if (name.equals("Referer", ignoreCase = true)) hasReferer = true
                 runCatching { builder.header(name, value) }
+            }
+        }
+        // 浏览器本会自动带 Referer（发起页 URL），走 JS 桥时代理必须手动补上，
+        // 否则 bgm.tv 这类校验 Referer 的站点会报"请求来路不正确"。
+        if (!hasReferer) {
+            view.url?.takeIf { it.isNotEmpty() }?.let { pageUrl ->
+                runCatching { builder.header("Referer", pageUrl) }
             }
         }
         val body = if (method == "GET" || method == "HEAD") null else bodyBytes.toRequestBody(contentType)
