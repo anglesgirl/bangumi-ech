@@ -23,6 +23,19 @@ import java.security.cert.X509Certificate
  */
 object BgmEchH3 {
     private const val TAG = "BgmEchH3"
+    private const val PREFS = "bgm_ech_h3"
+    private const val KEY_DEBUG_LOG = "debug_log"
+
+    /** H3 详细日志开关（默认关，测试时打开） */
+    fun isDebugLogEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_DEBUG_LOG, false)
+    }
+
+    fun setDebugLogEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_DEBUG_LOG, enabled).apply()
+    }
 
     /** kathttp3 客户端（懒加载，复用连接池） */
     @Volatile
@@ -121,6 +134,7 @@ object BgmEchH3 {
 
     /** 图片加载状态上报（给 H3FetcherHook 用）：h3_attempt / h3_skip_breaker / h3_success / fallback */
     fun logState(context: Context, host: String, state: String, durationMs: Long, url: String) {
+        if (!isDebugLogEnabled(context)) return
         val diag = diagUrl(context) + "?app=bangumi-ech"
         Thread {
             runCatching {
@@ -160,6 +174,7 @@ object BgmEchH3 {
         bytes: Int,
         error: String?,
     ) {
+        if (!isDebugLogEnabled(context)) return
         val diag = diagUrl(context) + "?app=bangumi-ech"
         Thread {
             runCatching {
