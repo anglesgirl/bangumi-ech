@@ -328,6 +328,15 @@ internal object BgmEchDoh {
 
     fun echConfig(hostname: String): ByteArray = echConfig(hostname, bestEffort = false)
 
+    /**
+     * 返回首个可用的 DoH 网关 URL（给 kathttp3 的 DohResolver 用）。
+     */
+    fun dohUrl(): String {
+        return endpoints.firstOrNull()?.url.toString().ifEmpty {
+            "https://cloudflare-dns.com/dns-query"
+        }
+    }
+
     private fun echConfig(hostname: String, bestEffort: Boolean): ByteArray {
         val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
         synchronized(lockFor(host)) {

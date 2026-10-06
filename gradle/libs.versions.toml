@@ -55,6 +55,7 @@ mediamp = "0.3.2"
 avifCoder = "3.0.0-alpha07"
 
 [libraries]
+kathttp3-ech = { module = "com.github.anglesgirl.kathttp3-ech:kathttp3", version = "6c38638c3409200573e246380e5ee8878f6baf32" }
 gradle-plugin-compose-compiler = { module = "org.jetbrains.kotlin:compose-compiler-gradle-plugin", version.ref = "kotlin-compose-compiler" }
 gradle-plugin-compose = { module = "org.jetbrains.compose:compose-gradle-plugin", version.ref = "compose-multiplatform" }
 gradle-plugin-agp = { module = "com.android.tools.build:gradle", version.ref = "agp" }

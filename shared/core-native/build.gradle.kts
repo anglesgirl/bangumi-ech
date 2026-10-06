@@ -53,6 +53,8 @@ kotlin {
             implementation(libs.androidx.webkit)
             // 安卓 ECH 策略依赖；不改变 JVM 的 Conscrypt 版本。
             implementation("org.conscrypt:conscrypt-android:2.7.0")
+            // kathttp3: ngtcp2-based H3 with native BoringSSL ECH support
+            implementation(libs.kathttp3.ech)
         }
 
         iosMain.dependencies {
