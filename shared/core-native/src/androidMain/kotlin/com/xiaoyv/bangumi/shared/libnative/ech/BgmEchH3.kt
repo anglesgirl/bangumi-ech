@@ -1,15 +1,21 @@
 package com.xiaoyv.bangumi.shared.libnative.ech
 
 import android.content.Context
-import android.util.Base64
 import android.util.Log
+import dev.kathttp3.DohResolver
+import dev.kathttp3.KatHttp3Client
+import dev.kathttp3.KatHttp3ClientConfig
+import dev.kathttp3.KatHttp3Header
+import dev.kathttp3.KatHttp3Request
+import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import java.io.File
 import java.security.KeyStore
 import java.security.cert.X509Certificate
 
 /**
- * quiche（HTTP/3 + ECH）的 JNI 入口。Rust 工程在 native-h3/，CI 用 cargo-ndk 编成 .so。
+ * kathttp3（HTTP/3 + ECH）的 Kotlin 入口。基于 ngtcp2 + nghttp3 + BoringSSL，
+ * ECH 走 BoringSSL 原生 SSL_set1_ech_config_list，比 quiche 补丁更稳。
  *
  * 定位：**只服务静态图片 GET**。有状态请求（API/登录/POST/Cookie）一律仍走
  * OkHttp + Conscrypt 的 TCP/ECH 链路 —— 那条也是这里失败时的兜底。
@@ -17,22 +23,27 @@ import java.security.cert.X509Certificate
 object BgmEchH3 {
     private const val TAG = "BgmEchH3"
 
+    /** kathttp3 客户端（懒加载，复用连接池） */
     @Volatile
-    private var loaded = false
+    private var katClient: KatHttp3Client? = null
 
-    /** 最近一次 JNI 返回的 JSON（失败时用来定位原因） */
+    /** 最近一次请求的结果（失败时用来定位原因） */
     @Volatile
     private var lastJson: String = ""
 
-    private fun ensureLoaded(): Boolean {
-        if (loaded) return true
-        return try {
-            System.loadLibrary("bgm_h3")
-            loaded = true
-            true
-        } catch (t: Throwable) {
-            Log.w(TAG, "H3 native 库未加载：${t.message}")
-            false
+    private fun getClient(context: Context): KatHttp3Client {
+        return katClient ?: synchronized(this) {
+            katClient ?: run {
+                // 用我们的 DoH 网关解析，自动提取 ECH
+                val dohUrl = BgmEchDoh.dohUrl() // 雅💓涵的DOH
+                val resolver = DohResolver(endpoint = dohUrl)
+                val config = KatHttp3ClientConfig(
+                    resolver = resolver,
+                    connectTimeoutMillis = 3000,
+                    requestTimeoutMillis = 25000,
+                )
+                KatHttp3Client(config, context.applicationContext).also { katClient = it }
+            }
         }
     }
 
@@ -66,27 +77,38 @@ object BgmEchH3 {
     fun fetchToFile(
         context: Context,
         host: String,
-        ip: String,
-        ech: ByteArray?,
         pathWithQuery: String,
         referer: String?,
         out: File,
     ): File? {
-        if (!ensureLoaded()) return null
-        val echB64 = ech?.takeIf { it.isNotEmpty() }?.let { Base64.encodeToString(it, Base64.NO_WRAP) } ?: ""
-        val json = try {
-            h3Fetch(host, ip, echB64, pathWithQuery, referer ?: "", caBundlePath(context), out.absolutePath)
+        return try {
+            runBlocking {
+                val client = getClient(context)
+                val url = "https://$host$pathWithQuery"
+                val headers = mutableListOf<KatHttp3Header>()
+                referer?.takeIf { it.isNotEmpty() }?.let {
+                    headers.add(KatHttp3Header("referer", it))
+                }
+                // Pixiv 图片需要 Referer，ImageInterceptor 已经设置了，这里兜底
+                val request = KatHttp3Request(
+                    method = "GET",
+                    url = url,
+                    headers = headers,
+                )
+                val response = client.execute(request)
+                lastJson = "status=${response.status} len=${response.body.size}"
+                if (response.status in 200..299 && response.body.isNotEmpty()) {
+                    out.writeBytes(response.body)
+                    out
+                } else {
+                    Log.w(TAG, "H3 请求失败：HTTP ${response.status}")
+                    null
+                }
+            }
         } catch (t: Throwable) {
             Log.w(TAG, "H3 调用异常：${t.message}")
-            return null
+            null
         }
-        val saved = try {
-            lastJson = json
-            JSONObject(json).optString("saved_to", "")
-        } catch (_: Throwable) {
-            ""
-        }
-        return if (saved.isNotEmpty() && !saved.startsWith("ERR:") && out.exists() && out.length() > 0) out else null
     }
 
     /**
@@ -215,9 +237,6 @@ object BgmEchH3 {
         // 失败即回落原链路（自带 UA/Accept/Referer），用户无感。
         // 默认所有域名都先试 H3；只有被负缓存记过的才直接走 H2。
         if (!shouldTryH3(context, host)) return null
-        val ip = runCatching { BgmEchDoh.resolve(host).firstOrNull()?.hostAddress }.getOrNull()
-            ?: run { report(context, host, "DoH 未解析出 IP"); return null }
-        val ech = runCatching { BgmEchDoh.echConfig(host) }.getOrNull()
         val pathWithQuery = buildString {
             append(uri.rawPath ?: "/")
             uri.rawQuery?.let { append('?').append(it) }
@@ -228,9 +247,9 @@ object BgmEchH3 {
             .filter { it.isLetterOrDigit() }
             .ifEmpty { "bin" }
         val out = File(context.cacheDir, "h3-" + System.nanoTime() + "." + ext)
-        val ok = fetchToFile(context, host, ip, ech, pathWithQuery, referer, out)
+        val ok = fetchToFile(context, host, pathWithQuery, referer, out)
         if (ok == null) {
-            report(context, host, "H3 未取回（ech=" + (ech?.size ?: 0) + "B, ip=" + ip + "）")
+            report(context, host, "H3 未取回")
             rememberH3(context, host, false, "取回失败")
             out.delete()
             return null
@@ -245,14 +264,4 @@ object BgmEchH3 {
         rememberH3(context, host, true)
         return ok
     }
-
-    external fun h3Fetch(
-        host: String,
-        peerIp: String,
-        echB64: String,
-        path: String,
-        referer: String,
-        caPath: String,
-        outFile: String,
-    ): String
 }
