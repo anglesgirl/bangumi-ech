@@ -78,9 +78,10 @@ checks = {
     '无写死 ECH 配置': 'Base64.decode' in doh and 'fetch(pool, host, "HTTPS")' in doh,
     'IP 响应先校验再解析': 'parseIpv4Literal' in doh and 'InetAddress.getByAddress' in doh,
     # ECH 活值：国内三家的纯 IP 端点（wire 格式、不带 Host 头），随机挑一家、失败换下一家；
-    # 三家都不通才回落到原有网关 JSON 链路。
-    '活值走国内三家纯 IP': 'ECH_DOH_IPS' in doh and all(ip in doh for ip in (
-        '223.5.5.5', '223.6.6.6', '1.12.12.12', '120.53.53.53', '101.198.193.29', '101.198.192.33')),
+    # 三家都不通才回落到原有网关 JSON 链路。IP 列表可通过构建注入 ech_doh_ips 覆盖，内置为 fallback。
+    '活值走国内三家纯 IP': 'BUILTIN_DOH_IPS' in doh and all(ip in doh for ip in (
+        '223.5.5.5', '223.6.6.6', '1.12.12.12', '120.53.53.53', '101.198.193.29', '101.198.192.33'))
+        and 'ech_doh_ips' in doh,
     '活值随机挑一家、失败换下一家': 'ECH_DOH_IPS.shuffled()' in doh and 'live ech via' in doh,
     '活值只认 wire 且仍保留网关 JSON 链路': 'application/dns-message' in doh
         and 'application/dns-json' in doh and 'LIVE_ONE_TIMEOUT_MILLIS' in doh,
