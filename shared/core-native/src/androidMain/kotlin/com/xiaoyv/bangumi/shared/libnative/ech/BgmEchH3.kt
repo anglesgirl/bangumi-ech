@@ -121,15 +121,14 @@ object BgmEchH3 {
 
     /** 图片加载状态上报（给 H3FetcherHook 用）：h3_attempt / h3_skip_breaker / h3_success / fallback */
     fun logState(context: Context, host: String, state: String, durationMs: Long, url: String) {
-        val diag = diagUrl(context)
+        val diag = diagUrl(context) + "?app=bangumi-ech"
         Thread {
             runCatching {
                 val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
                     .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
                 val json = org.json.JSONObject()
-                    .put("app", "bangumi-ech")
                     .put("event", "h3-state")
-                    .put("timestamp", fmt.format(java.util.Date()))
+                    .put("ts", fmt.format(java.util.Date()))
                     .put("host", host)
                     .put("state", state)
                     .put("duration_ms", durationMs)
@@ -161,15 +160,14 @@ object BgmEchH3 {
         bytes: Int,
         error: String?,
     ) {
-        val diag = diagUrl(context)
+        val diag = diagUrl(context) + "?app=bangumi-ech"
         Thread {
             runCatching {
                 val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
                     .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
                 val json = org.json.JSONObject()
-                    .put("app", "bangumi-ech")
                     .put("event", "h3-timing")
-                    .put("timestamp", fmt.format(java.util.Date()))
+                    .put("ts", fmt.format(java.util.Date()))
                     .put("host", host)
                     .put("url", url.take(200))
                     .put("total_ms", t2 - t0)
@@ -279,15 +277,14 @@ object BgmEchH3 {
         val now = System.currentTimeMillis()
         if (now - (lastReport[host] ?: 0L) < 60_000L) return
         lastReport[host] = now
-        val url = diagUrl(context)
+        val url = diagUrl(context) + "?app=bangumi-ech"
         Thread {
             runCatching {
                 val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
                     .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
                 val json = org.json.JSONObject()
-                    .put("app", "bangumi-ech")
                     .put("event", "h3-image-miss")
-                    .put("timestamp", fmt.format(java.util.Date()))
+                    .put("ts", fmt.format(java.util.Date()))
                     .put("host", host)
                     .put("reason", reason)
                     .put("detail", lastJson.take(1200))
