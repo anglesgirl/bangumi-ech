@@ -403,17 +403,31 @@ private fun TopicDetailScreenContent(
     var deletingCommentId by remember { mutableStateOf<Long?>(null) }
     // 从通知跳进来时定位到指定回复：等列表加载完后滚动到对应位置。
     // LazyColumn 前面有 2 个固定项（文章头 + 评论区头），所以 index 要 +2。
+    // 回复是树形嵌套（Node），用深度优先遍历找展平后的位置。
     var scrolledToTarget by remember(state.targetPostId) { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(state.displayReplies, state.targetPostId) {
         val targetId = state.targetPostId
         if (targetId != 0L && !scrolledToTarget && state.displayReplies.isNotEmpty()) {
-            val index = state.displayReplies.indexOfFirst { it.id == targetId }
-            if (index >= 0) {
+            var counter = 0
+            var foundIndex = -1
+            fun dfs(nodes: List<com.xiaoyv.bangumi.shared.data.model.response.bgm.ComposeReply>) {
+                for (node in nodes) {
+                    if (foundIndex >= 0) return
+                    if (node.id == targetId) {
+                        foundIndex = counter
+                        return
+                    }
+                    counter++
+                    if (node.replies.isNotEmpty()) dfs(node.replies)
+                }
+            }
+            dfs(state.displayReplies)
+            if (foundIndex >= 0) {
                 scrolledToTarget = true
                 // 稍等一帧让布局稳定
                 kotlinx.coroutines.delay(300)
                 runCatching {
-                    listState.scrollToItem(index + 2)
+                    listState.scrollToItem(foundIndex + 2)
                 }
             }
         }
