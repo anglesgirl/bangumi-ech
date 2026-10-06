@@ -419,7 +419,7 @@ mod android_jni {
             if path.is_empty() { "/" } else { &path },
             if referer.is_empty() { None } else { Some(&referer) },
             if ca_path.is_empty() { "/system/etc/security/cacerts" } else { &ca_path },
-            Duration::from_secs(8),
+            Duration::from_secs(3),
             Duration::from_secs(25),
         );
 
