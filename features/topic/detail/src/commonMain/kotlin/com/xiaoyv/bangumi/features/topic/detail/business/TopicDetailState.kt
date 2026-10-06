@@ -29,6 +29,8 @@ data class TopicDetailState(
     val currentUsername: String = "",
     @field:TopicType
     val type: String = TopicType.TYPE_UNKNOWN,
+    /** 从通知等入口跳进来时要定位到的回复 ID，0 表示不定位 */
+    val targetPostId: Long = 0,
     val topic: ComposeTopicDetail = ComposeTopicDetail.Empty,
     val episode: ComposeEpisode = ComposeEpisode.Empty,
     val mono: ComposeMonoDisplay = ComposeMonoDisplay.Empty,

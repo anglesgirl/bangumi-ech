@@ -55,35 +55,35 @@ class NotificationViewModel(
     private fun onClickItem(item: ComposeNotice) = intent {
         val screen = when (item.type) {
             // 小组
-            NoticeType.GROUP_TOPIC_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_GROUP)
-            NoticeType.GROUP_TOPIC_AT -> Screen.TopicDetail(item.mainID, TopicType.TYPE_GROUP)
-            NoticeType.GROUP_POST_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_GROUP)
+            NoticeType.GROUP_TOPIC_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_GROUP, item.relatedID)
+            NoticeType.GROUP_TOPIC_AT -> Screen.TopicDetail(item.mainID, TopicType.TYPE_GROUP, item.relatedID)
+            NoticeType.GROUP_POST_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_GROUP, item.relatedID)
 
             // 日志
-            NoticeType.BLOG_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_BLOG)
-            NoticeType.BLOG_POST_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_BLOG)
+            NoticeType.BLOG_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_BLOG, item.relatedID)
+            NoticeType.BLOG_POST_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_BLOG, item.relatedID)
 
             // 角色
-            NoticeType.CHARACTER_TOPIC_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_CRT)
-            NoticeType.CHARACTER_POST_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_CRT)
-            NoticeType.CHARACTER_POST_AT -> Screen.TopicDetail(item.mainID, TopicType.TYPE_CRT)
+            NoticeType.CHARACTER_TOPIC_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_CRT, item.relatedID)
+            NoticeType.CHARACTER_POST_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_CRT, item.relatedID)
+            NoticeType.CHARACTER_POST_AT -> Screen.TopicDetail(item.mainID, TopicType.TYPE_CRT, item.relatedID)
 
             // 人物
-            NoticeType.PERSON_POST_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_PERSON)
-            NoticeType.PERSON_POST_AT -> Screen.TopicDetail(item.mainID, TopicType.TYPE_PERSON)
+            NoticeType.PERSON_POST_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_PERSON, item.relatedID)
+            NoticeType.PERSON_POST_AT -> Screen.TopicDetail(item.mainID, TopicType.TYPE_PERSON, item.relatedID)
 
             // 条目
-            NoticeType.SUBJECT_TOPIC_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_SUBJECT)
-            NoticeType.SUBJECT_TOPIC_AT -> Screen.TopicDetail(item.mainID, TopicType.TYPE_SUBJECT)
-            NoticeType.SUBJECT_POST_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_SUBJECT)
+            NoticeType.SUBJECT_TOPIC_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_SUBJECT, item.relatedID)
+            NoticeType.SUBJECT_TOPIC_AT -> Screen.TopicDetail(item.mainID, TopicType.TYPE_SUBJECT, item.relatedID)
+            NoticeType.SUBJECT_POST_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_SUBJECT, item.relatedID)
 
             // 目录
-            NoticeType.INDEX_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_INDEX)
-            NoticeType.INDEX_POST_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_INDEX)
+            NoticeType.INDEX_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_INDEX, item.relatedID)
+            NoticeType.INDEX_POST_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_INDEX, item.relatedID)
 
             // 章节
-            NoticeType.EP_POST_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_EP)
-            NoticeType.EP_POST_AT -> Screen.TopicDetail(item.mainID, TopicType.TYPE_EP)
+            NoticeType.EP_POST_REPLY -> Screen.TopicDetail(item.mainID, TopicType.TYPE_EP, item.relatedID)
+            NoticeType.EP_POST_AT -> Screen.TopicDetail(item.mainID, TopicType.TYPE_EP, item.relatedID)
 
             // 时间线的吐槽
             NoticeType.TIMELINE_SAY_REPLY -> Screen.Empty

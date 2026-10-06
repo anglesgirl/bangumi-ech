@@ -224,7 +224,7 @@ sealed class Screen(
     data class PixivTag(val tag: String) : Screen(SCREEN_ROUTE_PIXIV_TAG)
 
     @Serializable
-    data class TopicDetail(val id: Long, @field:TopicType val type: String) : Screen(SCREEN_ROUTE_TOPIC_DETAIL)
+    data class TopicDetail(val id: Long, @field:TopicType val type: String, val postId: Long = 0) : Screen(SCREEN_ROUTE_TOPIC_DETAIL)
 
     @Serializable
     data class TopicPage(val param: ListTopicParam) : Screen(SCREEN_ROUTE_TOPIC_PAGE)

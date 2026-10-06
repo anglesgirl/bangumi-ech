@@ -401,6 +401,23 @@ private fun TopicDetailScreenContent(
     val scope = rememberCoroutineScope()
     val deleteDialogState = rememberAlertDialogState()
     var deletingCommentId by remember { mutableStateOf<Long?>(null) }
+    // 从通知跳进来时定位到指定回复：等列表加载完后滚动到对应位置。
+    // LazyColumn 前面有 2 个固定项（文章头 + 评论区头），所以 index 要 +2。
+    var scrolledToTarget by remember(state.targetPostId) { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(state.displayReplies, state.targetPostId) {
+        val targetId = state.targetPostId
+        if (targetId != 0L && !scrolledToTarget && state.displayReplies.isNotEmpty()) {
+            val index = state.displayReplies.indexOfFirst { it.id == targetId }
+            if (index >= 0) {
+                scrolledToTarget = true
+                // 稍等一帧让布局稳定
+                kotlinx.coroutines.delay(300)
+                runCatching {
+                    listState.scrollToItem(index + 2)
+                }
+            }
+        }
+    }
 
     BgmAlertDialog(
         state = deleteDialogState,

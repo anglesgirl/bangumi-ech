@@ -66,6 +66,7 @@ class TopicDetailViewModel(
     override fun createInitialState() = TopicDetailState(
         type = args.type,
         id = args.id,
+        targetPostId = args.postId,
         currentUserId = userManager.userInfo.id,
         currentUsername = userManager.userInfo.username,
         commentTypeFilters = persistentListOf(
