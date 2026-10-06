@@ -82,6 +82,7 @@ object BgmEchH3 {
         referer: String?,
         out: File,
     ): File? {
+        val t0 = System.currentTimeMillis()
         return try {
             runBlocking {
                 val client = getClient(context)
@@ -96,8 +97,12 @@ object BgmEchH3 {
                     url = url,
                     headers = headers,
                 )
+                val t1 = System.currentTimeMillis()
                 val response = client.execute(request)
+                val t2 = System.currentTimeMillis()
                 lastJson = "status=${response.status} len=${response.body.size}"
+                // 详细计时上报：定位 P站慢是 DNS/ECH/握手/传输哪个阶段
+                reportTiming(context, host, url, t0, t1, t2, response.status, response.body.size, null)
                 if (response.status in 200..299 && response.body.isNotEmpty()) {
                     out.writeBytes(response.body)
                     out
@@ -107,7 +112,56 @@ object BgmEchH3 {
                 }
             }
         } catch (t: Throwable) {
+            val t3 = System.currentTimeMillis()
             Log.w(TAG, "H3 调用异常：${t.message}")
+            reportTiming(context, host, "https://$host$pathWithQuery", t0, t0, t3, -1, 0, t.message)
+            null
+        }
+    }
+
+    /** 详细计时上报（测试用：不做 60s 限流，每条都发） */
+    private fun reportTiming(
+        context: Context,
+        host: String,
+        url: String,
+        t0: Long,
+        t1: Long,
+        t2: Long,
+        status: Int,
+        bytes: Int,
+        error: String?,
+    ) {
+        val diag = diagUrl(context)
+        Thread {
+            runCatching {
+                val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
+                    .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+                val json = org.json.JSONObject()
+                    .put("app", "bangumi-ech")
+                    .put("event", "h3-timing")
+                    .put("timestamp", fmt.format(java.util.Date()))
+                    .put("host", host)
+                    .put("url", url.take(200))
+                    .put("total_ms", t2 - t0)
+                    .put("queue_ms", t1 - t0)
+                    .put("request_ms", t2 - t1)
+                    .put("status", status)
+                    .put("bytes", bytes)
+                    .put("error", error ?: "")
+                    .put("engine", "kathttp3")
+                val c = (java.net.URL(diag).openConnection() as java.net.HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                }
+                c.outputStream.use { it.write(json.toString().toByteArray()) }
+                c.responseCode
+                c.disconnect()
+            }
+        }.start()
+    }
             null
         }
     }
