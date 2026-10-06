@@ -4,4 +4,4 @@
   正式包一旦删掉就会静默阻断所有受保护域名，因此必须显式保留。
 -->
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@string/ech_doh_pool" />
+    tools:keep="@string/ech_doh_pool,@string/ech_doh_ips,@string/ech_diag_url" />

@@ -134,6 +134,10 @@ object BgmEchH3 {
 
     private val REFERERS = listOf(
         "pximg.net" to "https://www.pixiv.net/",
+        // Bangumi 图片域名：部分 CDN 要求 Referer 才回图
+        "bgm.tv" to "https://bgm.tv/",
+        "bangumi.tv" to "https://bangumi.tv/",
+        "chii.in" to "https://chii.in/",
     )
 
     private fun refererFor(host: String): String? =
@@ -155,14 +159,23 @@ object BgmEchH3 {
         }.getOrDefault(false)
     }
 
-    private const val DIAG_URL = "https://log.anglesgirl.eu.org/v1/events"
+    private const val DIAG_URL_FALLBACK = "https://log.anglesgirl.eu.org/v1/events"
     private val lastReport = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
+    /** 诊断上报地址：优先读构建注入的 `ech_diag_url`，没有则用内置。 */
+    private fun diagUrl(context: Context): String {
+        return runCatching {
+            val id = context.resources.getIdentifier("ech_diag_url", "string", context.packageName)
+            if (id != 0) context.getString(id).trim().takeIf { it.isNotEmpty() } else null
+        }.getOrNull() ?: DIAG_URL_FALLBACK
+    }
+
     /** 只在失败时上报、同 host 60s 最多一条：判断"图慢"是 H3 没走，还是链路本身慢。 */
-    private fun report(host: String, reason: String) {
+    private fun report(context: Context, host: String, reason: String) {
         val now = System.currentTimeMillis()
         if (now - (lastReport[host] ?: 0L) < 60_000L) return
         lastReport[host] = now
+        val url = diagUrl(context)
         Thread {
             runCatching {
                 val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
@@ -174,7 +187,7 @@ object BgmEchH3 {
                     .put("host", host)
                     .put("reason", reason)
                     .put("detail", lastJson.take(1200))
-                val c = (java.net.URL(DIAG_URL).openConnection() as java.net.HttpURLConnection).apply {
+                val c = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
                     requestMethod = "POST"
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json")
@@ -203,7 +216,7 @@ object BgmEchH3 {
         // 默认所有域名都先试 H3；只有被负缓存记过的才直接走 H2。
         if (!shouldTryH3(context, host)) return null
         val ip = runCatching { BgmEchDoh.resolve(host).firstOrNull()?.hostAddress }.getOrNull()
-            ?: run { report(host, "DoH 未解析出 IP"); return null }
+            ?: run { report(context, host, "DoH 未解析出 IP"); return null }
         val ech = runCatching { BgmEchDoh.echConfig(host) }.getOrNull()
         val pathWithQuery = buildString {
             append(uri.rawPath ?: "/")
@@ -217,14 +230,14 @@ object BgmEchH3 {
         val out = File(context.cacheDir, "h3-" + System.nanoTime() + "." + ext)
         val ok = fetchToFile(context, host, ip, ech, pathWithQuery, referer, out)
         if (ok == null) {
-            report(host, "H3 未取回（ech=" + (ech?.size ?: 0) + "B, ip=" + ip + "）")
+            report(context, host, "H3 未取回（ech=" + (ech?.size ?: 0) + "B, ip=" + ip + "）")
             rememberH3(context, host, false, "取回失败")
             out.delete()
             return null
         }
-        report(host, "H3 成功：" + ok.length() + "B 扩展名=" + ok.extension)
+        report(context, host, "H3 成功：" + ok.length() + "B 扩展名=" + ok.extension)
         if (!looksLikeImage(ok)) {
-            report(host, "H3 返回的不是图片（疑似拦截页/HTML），已回落原链路")
+            report(context, host, "H3 返回的不是图片（疑似拦截页/HTML），已回落原链路")
             rememberH3(context, host, false, "返回非图片")
             ok.delete()
             return null
