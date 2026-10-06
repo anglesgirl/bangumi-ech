@@ -77,7 +77,7 @@ private const val TAG = "BGM-ECH-DOH"
  *
  * 可通过构建注入 `ech_doh_ips`（逗号分隔）覆盖；没有则用内置。
  */
-private val ECH_DOH_IPS_FALLBACK = listOf(
+private val BUILTIN_DOH_IPS = listOf(
     "223.5.5.5",        // 阿里
     "223.6.6.6",        // 阿里备用
     "1.12.12.12",       // 腾讯
@@ -86,13 +86,13 @@ private val ECH_DOH_IPS_FALLBACK = listOf(
     "101.198.192.33",   // 360 备用
 )
 
-/** 优先读构建注入的 IP 列表，拿不到再用内置。 */
-private fun echDohIps(): List<String> {
-    return runCatching {
+/** 优先读构建注入的 IP 列表，拿不到再用内置。只读一次：资源运行时不会变。 */
+private val ECH_DOH_IPS: List<String> by lazy {
+    runCatching {
         val id = application.resources.getIdentifier("ech_doh_ips", "string", application.packageName)
         if (id == 0) return@runCatching null
         application.getString(id).split(',').map { it.trim() }.filter { it.isNotEmpty() }
-    }.getOrNull()?.takeIf { it.isNotEmpty() } ?: ECH_DOH_IPS_FALLBACK
+    }.getOrNull()?.takeIf { it.isNotEmpty() } ?: BUILTIN_DOH_IPS
 }
 
 /** 单家超时：快失败快换下一家，别让冷启动干等。 */
@@ -446,7 +446,7 @@ internal object BgmEchDoh {
 
     /** 随机挑一家纯 IP 取活值；这家不行换下一家（顺序每轮重新打乱）。 */
     private fun queryLiveEch(): LiveEch? {
-        for (ip in echDohIps().shuffled()) {
+        for (ip in ECH_DOH_IPS.shuffled()) {
             val hit = runCatching { queryEchWire(ip, REFERENCE_ECH_HOST) }.getOrNull()
             if (hit != null) {
                 Log.i(TAG, "live ech via $ip: ${hit.wire.size} bytes, ttl=${hit.ttlMillis}ms, hints=${hit.hints.size}")
@@ -454,7 +454,7 @@ internal object BgmEchDoh {
             }
             Log.i(TAG, "live ech via $ip failed, next")
         }
-        Log.i(TAG, "live ech unavailable: ${echDohIps().size} domestic ips all failed")
+        Log.i(TAG, "live ech unavailable: ${ECH_DOH_IPS.size} domestic ips all failed")
         return null
     }
 

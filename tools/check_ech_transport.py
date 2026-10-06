@@ -11,6 +11,7 @@ doh = read(native / 'ech/BgmEchDoh.kt')
 state = read(native / 'ech/BgmEchState.kt')
 system = read(native / 'System.android.kt')
 app = read(native / 'AppApplication.kt')
+keep_xml = read(root / 'android/src/main/res/raw/keep.xml')
 checks = {
     '统一入口无条件安装 ECH': 'BgmEchTransport.configure(this)' in system,
     '统一入口仅保留 ECH 接线': 'config {\n                    BgmEchTransport.configure(this)\n                }' in system,
@@ -71,7 +72,8 @@ checks = {
         and 'retryOnConnectionFailure(false)' in doh,
     '网关自带 IP 且禁止系统解析': 'ECH 网关缺少自有 IP' in doh and 'Dns.SYSTEM' not in doh,
     '网关池通过资源读取': '"ech_doh_pool"' in doh,
-    '资源压缩保留网关资源': 'tools:keep="@string/ech_doh_pool"' in read(root / 'android/src/main/res/raw/keep.xml'),
+    # tools:keep 允许逗号追加更多资源（ech_doh_ips、ech_diag_url），只要求网关池仍在保留名单里。
+    '资源压缩保留网关资源': 'tools:keep' in keep_xml and '@string/ech_doh_pool' in keep_xml,
     '失败冷却持久化': 'putLong("blocked_until",' in doh and '300_000L' in doh,
     '无写死 ECH 配置': 'Base64.decode' in doh and 'fetch(pool, host, "HTTPS")' in doh,
     'IP 响应先校验再解析': 'parseIpv4Literal' in doh and 'InetAddress.getByAddress' in doh,
