@@ -28,6 +28,8 @@ dependencyResolutionManagement {
         }
         mavenCentral()
         mavenLocal()
+        // 本地预编译 AAR（kathttp3）
+        maven(rootDir.resolve("libs").toURI().toString())
         maven("https://jogamp.org/deployment/maven")
         maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
         exclusiveContent {
