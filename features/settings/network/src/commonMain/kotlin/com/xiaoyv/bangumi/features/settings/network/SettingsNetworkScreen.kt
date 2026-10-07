@@ -9,6 +9,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -120,6 +121,12 @@ private fun SettingsNetworkScreenContent(
     onActionEvent: (SettingsNetworkEvent.Action) -> Unit,
 ) {
     val settings = currentSettings()
+
+    // 打开设置页时，把持久化的开关状态同步到原生层（处理 App 重启后的状态恢复）
+    val context = LocalContext.current
+    LaunchedEffect(settings.network.h3DebugLog) {
+        syncH3DebugLogToNative(context, settings.network.h3DebugLog)
+    }
 
     Column(modifier = Modifier.padding(vertical = 16.dp)) {
         SettingContainer(label = { Text(text = stringResource(Res.string.global_domain)) }) {
@@ -266,7 +273,6 @@ private fun SettingsNetworkScreenContent(
         }
 
         SettingContainer(label = { Text(text = "ECH") }) {
-            val context = LocalContext.current
             SettingSwitchItem(
                 title = stringResource(Res.string.settings_h3_debug_log),
                 description = stringResource(Res.string.settings_h3_debug_log_desc),
