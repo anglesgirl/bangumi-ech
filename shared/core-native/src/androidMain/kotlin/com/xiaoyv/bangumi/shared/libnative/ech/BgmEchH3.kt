@@ -144,7 +144,7 @@ object BgmEchH3 {
                     .put("host", host)
                     .put("state", state)
                     .put("duration_ms", durationMs)
-                    .put("url", url.take(200))
+                    .put("path", url.take(200)) // key 不能叫 url：接收端会对 url 整体脱敏（见 co3 main/utils/remoteLog.js）
                     .put("engine", "kathttp3")
                 val json = org.json.JSONObject()
                     .put("app", "bangumi-ech")
@@ -185,7 +185,7 @@ object BgmEchH3 {
                     .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
                 val fields = org.json.JSONObject()
                     .put("host", host)
-                    .put("url", url.take(200))
+                    .put("path", url.take(200)) // key 不能叫 url：接收端会对 url 整体脱敏（见 co3 main/utils/remoteLog.js）
                     .put("total_ms", t2 - t0)
                     .put("queue_ms", t1 - t0)
                     .put("request_ms", t2 - t1)
