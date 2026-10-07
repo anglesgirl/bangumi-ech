@@ -15,10 +15,13 @@ import androidx.core.content.IntentCompat
 import androidx.lifecycle.lifecycleScope
 import com.xiaoyv.bangumi.shared.core.utils.debugLog
 import com.xiaoyv.bangumi.shared.core.utils.printTrace
+import com.xiaoyv.bangumi.shared.data.manager.app.UserManager
 import com.xiaoyv.bangumi.shared.libnative.component.ExternalUriHandler
+import com.xiaoyv.bangumi.shared.libnative.ech.BgmEchH3
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.koin.android.ext.android.getKoin
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,6 +33,14 @@ class MainActivity : ComponentActivity() {
         requestHighestRefreshRate()
         setContent {
             App()
+        }
+        // 启动时把设置里的 H3 调试日志开关同步到原生层
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching {
+                val userManager: UserManager = getKoin().get()
+                val enabled = userManager.settings.network.h3DebugLog
+                BgmEchH3.setDebugLogEnabled(this@MainActivity, enabled)
+            }
         }
         handleIncomingImage(intent)
         handlePixivUri(intent)

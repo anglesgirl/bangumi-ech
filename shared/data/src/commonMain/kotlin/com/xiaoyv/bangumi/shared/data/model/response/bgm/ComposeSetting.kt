@@ -117,6 +117,8 @@ data class ComposeSetting(
 
         @SerialName("douBanUA") val douBanUA: String = "api-client/1 com.douban.frodo/7.65.0(277) Android/33 product/coral vendor/Google model/Pixel 4 XL brand/google  rom/android  network/wifi  udid/0643fa6abfd3eaff076ff3ee603211ded11fc344  platform/mobile nd/1",
         @SerialName("douBanKey") val douBanKey: String = "bf7dddc7c9cfe6f7",
+
+        @SerialName("h3DebugLog") val h3DebugLog: Boolean = false,
     ) {
         val configHosts get() = hosts + sniHosts
         val tlsFragmentationDomains get() = sniHosts.keys

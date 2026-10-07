@@ -14,5 +14,8 @@ kotlin {
             implementation(projects.shared.data)
             implementation(projects.shared.ui)
         }
+        androidMain.dependencies {
+            implementation(projects.shared.coreNative)
+        }
     }
 }

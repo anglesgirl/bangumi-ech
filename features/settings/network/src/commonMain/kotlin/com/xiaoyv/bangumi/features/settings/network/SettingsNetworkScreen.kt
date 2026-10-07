@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import com.xiaoyv.bangumi.core_resource.resources.Res
 import com.xiaoyv.bangumi.core_resource.resources.global_domain
 import com.xiaoyv.bangumi.core_resource.resources.global_pixiv
@@ -27,6 +28,8 @@ import com.xiaoyv.bangumi.core_resource.resources.settings_domain_bgm_change_des
 import com.xiaoyv.bangumi.core_resource.resources.settings_domain_bgm_change_title
 import com.xiaoyv.bangumi.core_resource.resources.settings_domain_pixiv
 import com.xiaoyv.bangumi.core_resource.resources.settings_dou_ban
+import com.xiaoyv.bangumi.core_resource.resources.settings_h3_debug_log
+import com.xiaoyv.bangumi.core_resource.resources.settings_h3_debug_log_desc
 import com.xiaoyv.bangumi.core_resource.resources.settings_network
 import com.xiaoyv.bangumi.core_resource.resources.settings_timeout_request
 import com.xiaoyv.bangumi.core_resource.resources.settings_timeout_socket
@@ -259,6 +262,20 @@ private fun SettingsNetworkScreenContent(
                 onClick = {
                     onActionEvent(SettingsNetworkEvent.Action.OnUpdate(settings.network.copy(updateChannel = it)))
                 }
+            )
+        }
+
+        SettingContainer(label = { Text(text = "ECH") }) {
+            val context = LocalContext.current
+            SettingSwitchItem(
+                title = stringResource(Res.string.settings_h3_debug_log),
+                description = stringResource(Res.string.settings_h3_debug_log_desc),
+                shape = ListItemDefaults.segmentedShapes(0, 1),
+                value = settings.network.h3DebugLog,
+                onValueChange = {
+                    onActionEvent(SettingsNetworkEvent.Action.OnUpdate(settings.network.copy(h3DebugLog = it)))
+                    syncH3DebugLogToNative(context, it)
+                },
             )
         }
     }
