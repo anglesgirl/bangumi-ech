@@ -293,7 +293,9 @@ class SubjectRepositoryImpl(
                             body = SubjectSearchBody(
                                 keyword = "",
                                 filter = SubjectSearchBody.SubjectSearchFilter(
-                                    nsfw = false,
+                                    // 不写死 false：是否包含 NSFW 由服务端按账号权限决定（登录且注册满 60 天才放行，
+                                    // 未授权时服务端会强制改回 false）；写死 false 会让已授权用户在标签浏览里也看不到受限条目
+                                    nsfw = true,
                                     type = if (param.browser.subjectType != SubjectType.UNKNOWN) persistentListOf(param.browser.subjectType) else null,
                                     tags = param.browser.tags,
                                     date = param.browser.searchData()
