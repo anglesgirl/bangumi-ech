@@ -24,7 +24,7 @@ data class SubjectSearchBody(
     @Serializable
     data class SubjectSearchFilter(
         @SerialName("air_date") val date: SerializeList<String>? = null,
-        @SerialName("meta_tags") val metaTags: SerializeList<String>? = null,
+        @SerialName("metaTags") val metaTags: SerializeList<String>? = null,
         @SerialName("nsfw") val nsfw: Boolean = true,
         @SerialName("rank") val rank: SerializeList<String>? = null,
         @SerialName("rating") val rating: SerializeList<String>? = null,

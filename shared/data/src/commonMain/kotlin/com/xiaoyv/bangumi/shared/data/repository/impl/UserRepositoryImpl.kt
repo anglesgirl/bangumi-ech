@@ -18,6 +18,7 @@ import com.xiaoyv.bangumi.shared.data.manager.app.PreferenceStore
 import com.xiaoyv.bangumi.shared.data.model.request.bgm.ClearNoticeRequest
 import com.xiaoyv.bangumi.shared.data.model.request.bgm.CreateReportParam
 import com.xiaoyv.bangumi.shared.data.model.request.bgm.NextWebLoginParam
+import com.xiaoyv.bangumi.shared.data.model.request.bgm.UpdatePrivacyParam
 import com.xiaoyv.bangumi.shared.data.model.request.list.user.ListUserParam
 import com.xiaoyv.bangumi.shared.data.model.response.bgm.ComposeAuthToken
 import com.xiaoyv.bangumi.shared.data.model.response.bgm.ComposeEmptyBody
@@ -219,7 +220,7 @@ class UserRepositoryImpl(
     }
 
     override suspend fun submitUserPrivacy(privacy: ComposeUserPrivacy): Result<ComposeUserPrivacy> = client.requestNextUserApi {
-        patchPrivacy(privacy)
+        patchPrivacy(UpdatePrivacyParam.from(privacy))
     }
 
     override suspend fun fetchUserNotify(unread: Boolean?): Result<List<ComposeNotice>> = client.requestNextUserApi {

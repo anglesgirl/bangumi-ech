@@ -171,7 +171,9 @@ private fun SubjectBrowserScreenContent(
                 onOptionClick = {
                     onActionEvent(
                         SubjectBrowserEvent.Action.OnUpdateBrowserSubjectParam(
-                            body = param.browser.copy(subjectType = it.type)
+                            // cat 是按条目类型区分的（动画 1/2/3/5，书籍 1001…，游戏 4001…），
+                            // 换类型必须归零，否则会带着上一个类型的 cat 去查，结果是空列表。
+                            body = param.browser.copy(subjectType = it.type, cat = 0, series = false)
                         )
                     )
                 }

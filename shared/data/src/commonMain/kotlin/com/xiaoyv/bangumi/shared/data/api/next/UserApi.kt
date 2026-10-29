@@ -7,6 +7,7 @@ import com.xiaoyv.bangumi.shared.data.marker.AppJsonApiDsl
 import com.xiaoyv.bangumi.shared.data.model.request.bgm.ClearNoticeRequest
 import com.xiaoyv.bangumi.shared.data.model.request.bgm.CreateReportParam
 import com.xiaoyv.bangumi.shared.data.model.request.bgm.NextWebLoginParam
+import com.xiaoyv.bangumi.shared.data.model.request.bgm.UpdatePrivacyParam
 import com.xiaoyv.bangumi.shared.data.model.response.bgm.ComposeBlogEntry
 import com.xiaoyv.bangumi.shared.data.model.response.bgm.ComposeEmptyBody
 import com.xiaoyv.bangumi.shared.data.model.response.bgm.ComposeGroup
@@ -219,9 +220,12 @@ interface UserApi {
 
     /**
      * Update current user privacy settings
+     *
+     * 只提交可写字段：`preferences.canSetNsfwSubject` / `preferences.allowNsfw` 为服务端只读计算结果，
+     * 一并回传会被拒绝，导致设置实际未保存。
      */
     @PATCH("p1/privacy")
-    suspend fun patchPrivacy(@Body param: ComposeUserPrivacy): ComposeUserPrivacy
+    suspend fun patchPrivacy(@Body param: UpdatePrivacyParam): ComposeUserPrivacy
 
     /**
      * 获取未读通知
