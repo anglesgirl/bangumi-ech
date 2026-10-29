@@ -25,6 +25,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -122,81 +123,83 @@ fun HomeShortcutSheet(
                     .verticalScroll(rememberScrollState()),
             ) {
                 tabs.forEachIndexed { index, tab ->
-                    val visible = hiddenIds.none { it == tab.type }
-                    val dragging = index == dragIndex
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(ShortcutRowHeight)
-                            .zIndex(if (dragging) 1f else 0f)
-                            .offset { IntOffset(0, if (dragging) dragOffset.roundToInt() else 0) }
-                            .background(
-                                if (dragging) MaterialTheme.colorScheme.surfaceContainerHigh
-                                else MaterialTheme.colorScheme.surface
-                            )
-                            .pointerInput(tab.type) {
-                                detectDragGesturesAfterLongPress(
-                                    onDragStart = {
-                                        dragIndex = index
-                                        dragOffset = 0f
-                                    },
-                                    onDrag = { change, amount ->
-                                        change.consume()
-                                        val from = dragIndex
-                                        if (from < 0) return@detectDragGesturesAfterLongPress
-                                        dragOffset += amount.y
-                                        if (dragOffset > rowHeightPx / 2 && from < tabs.lastIndex) {
-                                            tabs.add(from + 1, tabs.removeAt(from))
-                                            dragIndex = from + 1
-                                            dragOffset -= rowHeightPx
-                                        } else if (dragOffset < -rowHeightPx / 2 && from > 0) {
-                                            tabs.add(from - 1, tabs.removeAt(from))
-                                            dragIndex = from - 1
-                                            dragOffset += rowHeightPx
-                                        }
-                                    },
-                                    onDragEnd = {
-                                        dragIndex = -1
-                                        dragOffset = 0f
-                                    },
-                                    onDragCancel = {
-                                        dragIndex = -1
-                                        dragOffset = 0f
-                                    },
+                    key(tab.type) {
+                        val visible = hiddenIds.none { it == tab.type }
+                        val dragging = index == dragIndex
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(ShortcutRowHeight)
+                                .zIndex(if (dragging) 1f else 0f)
+                                .offset { IntOffset(0, if (dragging) dragOffset.roundToInt() else 0) }
+                                .background(
+                                    if (dragging) MaterialTheme.colorScheme.surfaceContainerHigh
+                                    else MaterialTheme.colorScheme.surface
                                 )
-                            }
-                            .padding(horizontal = ContentMarginHalf),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(ContentMargin),
-                    ) {
-                        Icon(
-                            modifier = Modifier.size(24.dp),
-                            painter = painterResource(tab.icon),
-                            contentDescription = null,
-                            tint = if (visible) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.outline,
-                        )
-                        Text(
-                            modifier = Modifier.weight(1f),
-                            text = stringResource(tab.label),
-                            color = if (visible) MaterialTheme.colorScheme.onSurface
-                            else MaterialTheme.colorScheme.outline,
-                        )
-                        Switch(
-                            checked = visible,
-                            onCheckedChange = { checked ->
-                                if (checked) {
-                                    hiddenIds.removeAll { it == tab.type }
-                                } else if (hiddenIds.none { it == tab.type }) {
-                                    hiddenIds.add(tab.type.toString())
+                                .pointerInput(tab.type) {
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = {
+                                            dragIndex = index
+                                            dragOffset = 0f
+                                        },
+                                        onDrag = { change, amount ->
+                                            change.consume()
+                                            val from = dragIndex
+                                            if (from < 0) return@detectDragGesturesAfterLongPress
+                                            dragOffset += amount.y
+                                            if (dragOffset > rowHeightPx / 2 && from < tabs.lastIndex) {
+                                                tabs.add(from + 1, tabs.removeAt(from))
+                                                dragIndex = from + 1
+                                                dragOffset -= rowHeightPx
+                                            } else if (dragOffset < -rowHeightPx / 2 && from > 0) {
+                                                tabs.add(from - 1, tabs.removeAt(from))
+                                                dragIndex = from - 1
+                                                dragOffset += rowHeightPx
+                                            }
+                                        },
+                                        onDragEnd = {
+                                            dragIndex = -1
+                                            dragOffset = 0f
+                                        },
+                                        onDragCancel = {
+                                            dragIndex = -1
+                                            dragOffset = 0f
+                                        },
+                                    )
                                 }
-                            },
-                        )
-                        Text(
-                            text = "≡",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.outline,
-                        )
+                                .padding(horizontal = ContentMarginHalf),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(ContentMargin),
+                        ) {
+                            Icon(
+                                modifier = Modifier.size(24.dp),
+                                painter = painterResource(tab.icon),
+                                contentDescription = null,
+                                tint = if (visible) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.outline,
+                            )
+                            Text(
+                                modifier = Modifier.weight(1f),
+                                text = stringResource(tab.label),
+                                color = if (visible) MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.outline,
+                            )
+                            Switch(
+                                checked = visible,
+                                onCheckedChange = { checked ->
+                                    if (checked) {
+                                        hiddenIds.removeAll { it == tab.type }
+                                    } else if (hiddenIds.none { it == tab.type }) {
+                                        hiddenIds.add(tab.type.toString())
+                                    }
+                                },
+                            )
+                            Text(
+                                text = "≡",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.outline,
+                            )
+                        }
                     }
                     HorizontalDivider()
                 }

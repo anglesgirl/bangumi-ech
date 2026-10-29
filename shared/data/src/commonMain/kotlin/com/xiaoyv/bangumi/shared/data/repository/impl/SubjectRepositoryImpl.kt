@@ -43,12 +43,15 @@ import com.xiaoyv.bangumi.shared.data.repository.SubjectRepository
 import com.xiaoyv.bangumi.shared.data.repository.datasource.MemoryPagingController
 import com.xiaoyv.bangumi.shared.data.repository.datasource.createMemoryOffsetLimitPagingController
 import com.xiaoyv.bangumi.shared.data.repository.datasource.createMemoryPageLimitPagingController
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.sync.Mutex
 import kotlin.math.abs
 
 /**
@@ -72,38 +75,40 @@ class SubjectRepositoryImpl(
      * 而排行榜是 `rank:asc`，所以可以用「上一页最后一名的 rank」作为游标继续查 `rank > 游标`，
      * 每次 offset 都是 0，从而绕开 1000 条上限。
      */
-    private val seekCursors = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    private val searchStateLock = SynchronizedObject()
+    private val seekCursors = mutableMapOf<String, Int>()
 
     /** key -> (请求的 offset -> 该页使用的游标)。同一页重试时复用，避免跳过或重复。 */
-    private val seekCursorByOffset =
-        java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.ConcurrentHashMap<Int, Int>>()
+    private val seekCursorByOffset = mutableMapOf<String, MutableMap<Int, Int>>()
 
-    private fun seekCursor(key: String, offset: Int): Int {
+    private fun seekCursor(key: String, offset: Int): Int = synchronized(searchStateLock) {
         if (offset <= 0) {
             seekCursors.remove(key)
             seekCursorByOffset.remove(key)
-            return 0
+            0
+        } else {
+            seekCursorByOffset[key]?.get(offset) ?: seekCursors[key] ?: 0
         }
-        return seekCursorByOffset[key]?.get(offset) ?: seekCursors[key] ?: 0
     }
 
-    private fun advanceSeek(key: String, offset: Int, usedCursor: Int, maxRank: Int) {
+    private fun advanceSeek(key: String, offset: Int, usedCursor: Int, maxRank: Int) = synchronized(searchStateLock) {
         val next = maxOf(usedCursor, maxRank)
         seekCursors[key] = next
-        val byOffset = seekCursorByOffset.getOrPut(key) { java.util.concurrent.ConcurrentHashMap() }
+        val byOffset = seekCursorByOffset.getOrPut(key) { mutableMapOf() }
         byOffset[offset] = usedCursor
         byOffset[offset + pagingConfig.pageSize] = next
     }
 
     /** 客户端日期过滤的扫描状态：按 rank 游标往前扫，命中项留在 buffer 里，保证翻页不丢条。 */
     private class DateScanState {
+        val mutex = Mutex()
         var cursor: Int = 0
         var exhausted: Boolean = false
         val buffer: MutableList<ComposeSubject> = mutableListOf()
     }
 
-    /** key -> 扫描状态。key 由 类型/分类/年/月 组成，换筛选条件就是新的一条队列。 */
-    private val dateScanStates = java.util.concurrent.ConcurrentHashMap<String, DateScanState>()
+    /** key -> 扫描状态。key 由 类型/分类/年/月/series 组成，换筛选条件就是新的一条队列。 */
+    private val dateScanStates = mutableMapOf<String, DateScanState>()
 
     /** `info` 里的中文日期前缀，例如 `2024年1月5日` / `2024年1月` / `2024年`。 */
     private val airtimeYearMonthCn = Regex("^(\\d{4})年(?:(\\d{1,2})月)?")
@@ -126,9 +131,6 @@ class SubjectRepositoryImpl(
     private companion object {
         /** 日期筛选时单次向搜索接口要多少条（接口上限 100），一次多要点少跑几趟。 */
         const val DATE_SCAN_LIMIT = 100
-
-        /** 日期筛选时单次请求最多扫描多少批搜索结果，避免冷门年份把请求拖太久。 */
-        const val MAX_DATE_SCAN_PAGES = 12
     }
 
     override fun fetchSubjectPager(param: ListSubjectParam): MemoryPagingController<ComposeSubjectRelation, Long> {
@@ -368,67 +370,108 @@ class SubjectRepositoryImpl(
                     (browser.sort == SubjectSortBrowserType.RANK && (cat == 0 || platformMetaTag != null))
                 if (useSearchApi) {
                     client.requestNextSearchApi {
-                        val seekKey = "${browser.subjectType}:$cat:${browser.year}:${browser.month}"
+                        val seekKey = "${browser.subjectType}:$cat:${browser.year}:${browser.month}:${browser.series}"
                         if (isRankSearch && (browser.year > 0 || browser.month > 0)) {
                             // 搜索接口的 date 过滤在服务端是坏的（任何值都返回 0 条），只能先按 rank 取回，
-                            // 再在客户端按 info 里的日期过滤；用扫描游标 + 缓冲，保证翻页不丢条。
+                            // 再在客户端按 info 里的日期和 series 过滤；用扫描游标 + 缓冲，保证翻页不丢条。
                             val pageSize = pagingConfig.pageSize
-                            val state = if (offset <= 0) {
-                                DateScanState().also { dateScanStates[seekKey] = it }
-                            } else {
-                                dateScanStates.getOrPut(seekKey) { DateScanState() }
+                            val state = synchronized(searchStateLock) {
+                                if (offset <= 0) {
+                                    DateScanState().also { dateScanStates[seekKey] = it }
+                                } else {
+                                    dateScanStates.getOrPut(seekKey) { DateScanState() }
+                                }
                             }
-                            var scans = 0
-                            while (state.buffer.size < pageSize && !state.exhausted && scans < MAX_DATE_SCAN_PAGES) {
-                                val result = searchSubjects(
+                            state.mutex.lock()
+                            try {
+                                while (state.buffer.size < pageSize && !state.exhausted) {
+                                    val page = searchSubjects(
+                                        body = SubjectSearchBody(
+                                            keyword = "",
+                                            filter = SubjectSearchBody.SubjectSearchFilter(
+                                                nsfw = true,
+                                                rank = if (state.cursor > 0) persistentListOf(">${state.cursor}") else persistentListOf(">0"),
+                                                metaTags = platformMetaTag?.let { persistentListOf(it) },
+                                                type = if (browser.subjectType != SubjectType.UNKNOWN) persistentListOf(browser.subjectType) else null,
+                                            ),
+                                            sort = SubjectSortBrowserType.toSearchType(browser.sort),
+                                        ),
+                                        offset = 0,
+                                        limit = DATE_SCAN_LIMIT
+                                    )
+                                    val result = page.result
+                                    if (result.isEmpty()) {
+                                        state.exhausted = true
+                                        break
+                                    }
+                                    for (subject in result) {
+                                        if ((!browser.series || subject.series) && matchesDate(subject, browser.year, browser.month)) {
+                                            state.buffer += subject
+                                        }
+                                    }
+                                    val nextCursor = result.maxOf { it.rating.rank }
+                                    if (nextCursor <= state.cursor) {
+                                        state.exhausted = true
+                                        break
+                                    }
+                                    state.cursor = nextCursor
+                                }
+                                val take = minOf(pageSize, state.buffer.size)
+                                val result = state.buffer.subList(0, take).toList()
+                                state.buffer.subList(0, take).clear()
+                                result.map { ComposeSubjectRelation(subject = it.normalized()) }
+                            } finally {
+                                state.mutex.unlock()
+                            }
+                        } else if (isRankSearch) {
+                            // 搜索接口只能取前 1000 条（Meilisearch maxTotalHits，offset 超过就空），
+                            // 排行榜按 rank 升序，所以用“上一页最后一名的 rank”作游标续页，绕开 1000 条上限。
+                            // 按 rank 游标继续消化短页，避免回填缺项或 series 过滤使分页提前结束。
+                            val pageSize = pagingConfig.pageSize
+                            val pageStartCursor = seekCursor(seekKey, offset)
+                            var cursor = pageStartCursor
+                            val result = mutableListOf<ComposeSubject>()
+                            var exhausted = false
+                            while (result.size < pageSize && !exhausted) {
+                                val page = searchSubjects(
                                     body = SubjectSearchBody(
                                         keyword = "",
                                         filter = SubjectSearchBody.SubjectSearchFilter(
                                             nsfw = true,
-                                            rank = if (state.cursor > 0) persistentListOf(">${state.cursor}") else persistentListOf(">0"),
+                                            rank = if (cursor > 0) persistentListOf(">$cursor") else persistentListOf(">0"),
                                             metaTags = platformMetaTag?.let { persistentListOf(it) },
                                             type = if (browser.subjectType != SubjectType.UNKNOWN) persistentListOf(browser.subjectType) else null,
                                         ),
                                         sort = SubjectSortBrowserType.toSearchType(browser.sort),
                                     ),
-                                    offset = 0,
-                                    limit = DATE_SCAN_LIMIT
-                                ).result
-                                scans++
-                                if (result.isEmpty()) {
-                                    state.exhausted = true
+                                    offset = if (cursor > 0) 0 else offset,
+                                    limit = pageSize
+                                )
+                                if (page.result.isEmpty()) {
+                                    exhausted = true
                                     break
                                 }
-                                for (subject in result) {
-                                    if (matchesDate(subject, browser.year, browser.month)) {
-                                        state.buffer += subject
-                                    }
-                                    if (subject.rating.rank > state.cursor) {
-                                        state.cursor = subject.rating.rank
-                                    }
+                                val nextCursor = page.result.maxOf { it.rating.rank }
+                                if (nextCursor <= cursor) {
+                                    exhausted = true
+                                    break
                                 }
-                                if (result.size < DATE_SCAN_LIMIT) state.exhausted = true
+                                page.result.forEach { subject ->
+                                    if (!browser.series || subject.series) result += subject
+                                }
+                                cursor = nextCursor
                             }
-                            val take = minOf(pageSize, state.buffer.size)
-                            val result = state.buffer.subList(0, take).toList()
-                            state.buffer.subList(0, take).clear()
-                            result.map { ComposeSubjectRelation(subject = it.normalized()) }
+                            if (cursor > pageStartCursor) {
+                                advanceSeek(seekKey, offset, pageStartCursor, cursor)
+                            }
+                            result.take(pageSize).map { ComposeSubjectRelation(subject = it.normalized()) }
                         } else {
-                            // 搜索接口只能取前 1000 条（Meilisearch maxTotalHits，offset 超过就空），
-                            // 排行榜按 rank 升序，所以用“上一页最后一名的 rank”作游标续页，绕开 offset 上限。
-                            val seekCursor = if (isRankSearch) seekCursor(seekKey, offset) else 0
-                            val rankFilter = when {
-                                !isRankSearch -> null
-                                seekCursor > 0 -> persistentListOf(">$seekCursor")
-                                else -> persistentListOf(">0")
-                            }
                             val page = searchSubjects(
                                 body = SubjectSearchBody(
                                     keyword = "",
                                     filter = SubjectSearchBody.SubjectSearchFilter(
-                                        // 账号无权限时服务端会强制改回 false，这里传 true 不会越权
                                         nsfw = true,
-                                        rank = rankFilter,
+                                        rank = null,
                                         metaTags = platformMetaTag?.let { persistentListOf(it) },
                                         type = if (browser.subjectType != SubjectType.UNKNOWN) persistentListOf(browser.subjectType) else null,
                                         tags = browser.tags.takeIf { it.isNotEmpty() },
@@ -436,12 +479,9 @@ class SubjectRepositoryImpl(
                                     ),
                                     sort = SubjectSortBrowserType.toSearchType(browser.sort),
                                 ),
-                                offset = if (seekCursor > 0) 0 else offset,
+                                offset = offset,
                                 limit = pagingConfig.pageSize
                             )
-                            if (isRankSearch && page.result.isNotEmpty()) {
-                                advanceSeek(seekKey, offset, seekCursor, page.result.maxOf { it.rating.rank })
-                            }
                             page.result.map { ComposeSubjectRelation(subject = it.normalized()) }
                         }
                     }
