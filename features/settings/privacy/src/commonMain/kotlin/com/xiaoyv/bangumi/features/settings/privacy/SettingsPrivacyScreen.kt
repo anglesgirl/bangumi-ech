@@ -7,6 +7,7 @@ import com.xiaoyv.bangumi.shared.ui.component.scroll.rememberScrollUpScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -39,6 +40,7 @@ import com.xiaoyv.bangumi.shared.ui.component.bar.BgmLargeTopAppBar
 import com.xiaoyv.bangumi.shared.ui.component.layout.state.StateLayout
 import com.xiaoyv.bangumi.shared.ui.component.navigation.Screen
 import com.xiaoyv.bangumi.shared.ui.component.settings.SettingContainer
+import com.xiaoyv.bangumi.shared.ui.component.settings.SettingItem
 import com.xiaoyv.bangumi.shared.ui.component.settings.SettingOptionItem
 import com.xiaoyv.bangumi.shared.ui.component.settings.SettingSwitchItem
 import com.xiaoyv.bangumi.shared.ui.composition.TabTokens
@@ -129,16 +131,17 @@ private fun SettingsPrivacyScreenContent(
                     onActionEvent(SettingsPrivacyEvent.Action.OnUpdatePrivacy(updated))
                 }
             )
-            SettingSwitchItem(
+            SettingItem(
                 title = stringResource(Res.string.settings_privacy_nsfw_allow),
                 shape = ListItemDefaults.segmentedShapes(1, 2),
-                value = preferences.allowNsfw,
-                onValueChange = { checked ->
-                    val updated = privacy.copy(
-                        preferences = preferences.copy(allowNsfw = checked)
+                enabled = false,
+                trailingContent = {
+                    Switch(
+                        checked = preferences.allowNsfw,
+                        onCheckedChange = null,
+                        enabled = false,
                     )
-                    onActionEvent(SettingsPrivacyEvent.Action.OnUpdatePrivacy(updated))
-                }
+                },
             )
         }
 

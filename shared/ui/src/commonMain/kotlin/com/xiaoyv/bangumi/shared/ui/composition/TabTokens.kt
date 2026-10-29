@@ -377,6 +377,24 @@ object TabTokens {
         createFeature(FeatureType.TYPE_PIXIV, Res.drawable.ic_pixiv),
     )
 
+    /**
+     * 按用户配置解析首页快捷入口。
+     *
+     * 先按 [order] 里保存的顺序排列，未出现在 order 里的按 [mainHomeActions] 的默认顺序补在后面，
+     * 最后过滤掉 [hidden] 里的项。order / hidden 为空时就是默认全显示。
+     *
+     * @param order 保存的顺序，元素为 [FeatureType] 的值
+     * @param hidden 被隐藏的入口
+     */
+    fun resolvedHomeActions(
+        order: List<String>,
+        hidden: Collection<String>,
+    ): List<ComposeDrawableTab> {
+        val ordered = order.mapNotNull { id -> mainHomeActions.firstOrNull { it.type == id } }
+        val rest = mainHomeActions.filter { tab -> order.none { it == tab.type } }
+        return (ordered + rest).filter { tab -> hidden.none { it == tab.type } }
+    }
+
     val mainHomeBlogFilters = persistentListOf(
         ComposeTextTab(SubjectType.ANIME, Res.string.global_anime),
         ComposeTextTab(SubjectType.BOOK, Res.string.global_book),

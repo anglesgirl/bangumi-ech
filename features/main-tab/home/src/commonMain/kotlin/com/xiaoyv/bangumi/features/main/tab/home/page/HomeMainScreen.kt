@@ -47,6 +47,7 @@ import com.xiaoyv.bangumi.shared.core.mvi.UiState
 import com.xiaoyv.bangumi.shared.core.types.FeatureType
 import com.xiaoyv.bangumi.shared.core.types.SubjectSortBrowserType
 import com.xiaoyv.bangumi.shared.core.types.SubjectType
+import com.xiaoyv.bangumi.shared.data.manager.shared.currentSettings
 import com.xiaoyv.bangumi.shared.data.model.request.list.subject.SubjectBrowserBody
 import com.xiaoyv.bangumi.shared.data.model.response.bgm.ComposeHomepageCard
 import com.xiaoyv.bangumi.shared.data.model.response.bgm.subject.ComposeSubjectRelation
@@ -58,7 +59,7 @@ import com.xiaoyv.bangumi.shared.ui.component.navigation.Screen
 import com.xiaoyv.bangumi.shared.ui.component.scroll.rememberScrollUpLazyListState
 import com.xiaoyv.bangumi.shared.ui.component.space.LayoutGridWidth
 import com.xiaoyv.bangumi.shared.ui.component.text.SectionTitle
-import com.xiaoyv.bangumi.shared.ui.composition.TabTokens.mainHomeActions
+import com.xiaoyv.bangumi.shared.ui.composition.TabTokens
 import com.xiaoyv.bangumi.shared.ui.kts.isExtraSmallScreen
 import com.xiaoyv.bangumi.shared.ui.theme.ContentMargin
 import com.xiaoyv.bangumi.shared.ui.theme.ContentMarginHalf
@@ -153,6 +154,15 @@ fun HomeMainAction(
     val space = if (isExtraSmallScreen) 16.dp else 24.dp
     val scope = rememberCoroutineScope()
 
+    // 首页快捷入口：按「设置 → UI 配置 → 首页快捷入口」里自定义的顺序与显隐渲染。
+    val uiConfig = currentSettings().ui
+    val homeActions = remember(uiConfig.homeShortcutOrder, uiConfig.hiddenHomeShortcuts) {
+        TabTokens.resolvedHomeActions(
+            order = uiConfig.homeShortcutOrder,
+            hidden = uiConfig.hiddenHomeShortcuts,
+        )
+    }
+
     AdaptiveGrid(
         minColumnWidth = 50.dp,
         horizontalSpacing = space,
@@ -161,7 +171,7 @@ fun HomeMainAction(
             .fillMaxWidth()
             .padding(ContentMargin),
     ) {
-        mainHomeActions.forEach {
+        homeActions.forEach {
             val label = stringResource(it.label)
 
             Column(

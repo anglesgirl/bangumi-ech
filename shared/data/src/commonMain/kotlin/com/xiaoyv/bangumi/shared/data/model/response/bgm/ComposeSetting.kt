@@ -9,7 +9,9 @@ import com.xiaoyv.bangumi.shared.core.types.settings.SettingIndication
 import com.xiaoyv.bangumi.shared.core.types.settings.SettingNavigationAnimation
 import com.xiaoyv.bangumi.shared.core.types.settings.SettingTheme
 import com.xiaoyv.bangumi.shared.core.types.settings.SettingUpdateChannel
+import com.xiaoyv.bangumi.shared.core.utils.serialization.SerializeList
 import com.xiaoyv.bangumi.shared.core.utils.serialization.SerializeMap
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -74,6 +76,12 @@ data class ComposeSetting(
 
         @SerialName("timeMachineGridLimit") val timeMachineGridLimit: Int = 10,
         @SerialName("trackingGridLineLimit") val trackingGridLineLimit: Int = 4,
+
+        /** 首页快捷入口的显示顺序；空表示使用默认顺序。元素为 [FeatureType] 的值。 */
+        @SerialName("homeShortcutOrder") val homeShortcutOrder: SerializeList<String> = persistentListOf(),
+
+        /** 被隐藏的首页快捷入口；元素为 [FeatureType] 的值。 */
+        @SerialName("hiddenHomeShortcuts") val hiddenHomeShortcuts: SerializeList<String> = persistentListOf(),
     ) {
         companion object {
             val Default = UIConfig()

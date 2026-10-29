@@ -10,16 +10,22 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.xiaoyv.bangumi.core_resource.resources.Res
+import com.xiaoyv.bangumi.core_resource.resources.global_home
 import com.xiaoyv.bangumi.core_resource.resources.settings_appearance
 import com.xiaoyv.bangumi.core_resource.resources.settings_cache_state
 import com.xiaoyv.bangumi.core_resource.resources.settings_cache_state_desc
 import com.xiaoyv.bangumi.core_resource.resources.settings_content
 import com.xiaoyv.bangumi.core_resource.resources.settings_deeplink
+import com.xiaoyv.bangumi.core_resource.resources.settings_home_shortcuts
+import com.xiaoyv.bangumi.core_resource.resources.settings_home_shortcuts_summary
 import com.xiaoyv.bangumi.core_resource.resources.settings_indication
 import com.xiaoyv.bangumi.core_resource.resources.settings_navigation_animation
 import com.xiaoyv.bangumi.core_resource.resources.settings_performance
@@ -51,6 +57,7 @@ import com.xiaoyv.bangumi.shared.ui.composition.TabTokens.settingIndicationItems
 import com.xiaoyv.bangumi.shared.ui.composition.TabTokens.settingNavigationAnimationItems
 import com.xiaoyv.bangumi.shared.ui.kts.collectBaseSideEffect
 import com.xiaoyv.bangumi.shared.ui.theme.PreviewColumn
+import kotlinx.collections.immutable.toPersistentList
 import org.jetbrains.compose.resources.stringResource
 import org.orbitmvi.orbit.compose.collectAsState
 import com.xiaoyv.bangumi.shared.ui.component.scroll.rememberScrollUpScrollState as rememberScrollState
@@ -119,6 +126,7 @@ private fun SettingsUiScreenContent(
     onActionEvent: (SettingsUiEvent.Action) -> Unit,
 ) {
     val settings = currentSettings()
+    var showHomeShortcutSheet by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.padding(vertical = 16.dp)) {
         SettingContainer(label = { Text(text = stringResource(Res.string.settings_appearance)) }) {
@@ -150,6 +158,17 @@ private fun SettingsUiScreenContent(
                 onValueChange = {
                     onActionEvent(SettingsUiEvent.Action.OnUpdate(settings.ui.copy(topAppBarScrollUp = it)))
                 },
+            )
+        }
+
+        SettingContainer(label = { Text(text = stringResource(Res.string.global_home)) }) {
+            SettingItem(
+                title = stringResource(Res.string.settings_home_shortcuts),
+                shape = ListItemDefaults.segmentedShapes(0, 1),
+                supportingContent = {
+                    Text(text = stringResource(Res.string.settings_home_shortcuts_summary))
+                },
+                onClick = { showHomeShortcutSheet = true },
             )
         }
 
@@ -205,6 +224,25 @@ private fun SettingsUiScreenContent(
                 }
             )
         }
+    }
+
+    if (showHomeShortcutSheet) {
+        HomeShortcutSheet(
+            order = settings.ui.homeShortcutOrder,
+            hidden = settings.ui.hiddenHomeShortcuts,
+            onDismiss = { showHomeShortcutSheet = false },
+            onApply = { order, hidden ->
+                showHomeShortcutSheet = false
+                onActionEvent(
+                    SettingsUiEvent.Action.OnUpdate(
+                        settings.ui.copy(
+                            homeShortcutOrder = order.toPersistentList(),
+                            hiddenHomeShortcuts = hidden.toPersistentList(),
+                        )
+                    )
+                )
+            },
+        )
     }
 }
 

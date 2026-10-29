@@ -227,6 +227,10 @@ internal object BgmEchDoh {
             hints.remove(REFERENCE_ECH_HOST)
             // 活值内存缓存也要丢：它可能正是被服务器拒的那一份。
             liveEntry = null
+            // 被服务器拒绝说明手上这份配置确实不能用了；而 5 分钟冷却往往来自更早的一次瞬时失败，
+            // 不清掉的话 BgmEchTransport 的自动重试会直接撞上「DoH 冷却中」，只能干等 5 分钟。
+            liveFailedAt = 0
+            preferences.edit().remove("blocked_until").commit()
             BgmEchState.drop(REFERENCE_ECH_HOST)
             preferences.edit()
                 .remove("cfg:$REFERENCE_ECH_HOST").remove("cfg:$REFERENCE_ECH_HOST.at")

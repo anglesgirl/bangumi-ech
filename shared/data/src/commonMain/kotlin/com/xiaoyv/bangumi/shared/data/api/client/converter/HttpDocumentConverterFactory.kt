@@ -26,7 +26,13 @@ class HttpDocumentConverterFactory : Converter.Factory {
             return object : Converter.SuspendResponseConverter<HttpResponse, Any> {
                 override suspend fun convert(result: KtorfitResult): Any {
                     return when (result) {
-                        is KtorfitResult.Failure -> throw ApiException(cause = result.throwable)
+                        is KtorfitResult.Failure -> throw ApiException(
+                            // 默认的 “Api Error” 会把真正原因（ECH/DoH/超时/证书…）吞掉，
+                            // 这里把底层异常信息带到界面上，便于定位。
+                            message = result.throwable.message?.trim()?.takeIf { it.isNotEmpty() } ?: "Api Error",
+                            cause = result.throwable,
+                        )
+
                         is KtorfitResult.Success -> result.response.bodyAsText().let {
                             Ksoup.parse(it, ktorfit.baseUrl)
                         }

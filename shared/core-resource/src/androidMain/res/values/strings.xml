@@ -388,6 +388,10 @@
     <string name="settings_live2d_size_175">特大 (175dp)</string>
     <string name="settings_live2d_size_200">超大 (200dp)</string>
     <string name="settings_ui">UI 配置</string>
+    <string name="settings_home_shortcuts">首页快捷入口</string>
+    <string name="settings_home_shortcuts_summary">自定义排序或隐藏入口</string>
+    <string name="settings_home_shortcuts_sheet">首页快捷入口显示与排序</string>
+    <string name="settings_home_shortcuts_reorder">拖动排序</string>
     <string name="settings_bar">底栏配置</string>
     <string name="settings_network">网络配置</string>
     <string name="settings_translate">翻译配置</string>
