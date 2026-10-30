@@ -129,17 +129,6 @@ private fun SearchInputScreen(
                     )
                 }
 
-                IconButton(
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 4.dp),
-                    onClick = { onActionEvent(SearchInputEvent.Action.OnSearch) },
-                ) {
-                    Icon(
-                        imageVector = BgmIcons.Search,
-                        contentDescription = stringResource(Res.string.global_search),
-                    )
-                }
             }
         }
     ) {
@@ -198,8 +187,9 @@ private fun SearchInputBar(
     onActionEvent: (SearchInputEvent.Action) -> Unit,
 ) {
     BmgTextField(
+        showClearButton = true,
         modifier = modifier,
-        contentPadding = PaddingValues(horizontal = 56.dp, vertical = 14.dp),
+        contentPadding = PaddingValues(start = 56.dp, end = 8.dp, top = 14.dp, bottom = 14.dp),
         value = state.query,
         onValueChange = { onActionEvent(SearchInputEvent.Action.OnQueryChange(it)) },
         shape = CircleShape,
@@ -208,6 +198,14 @@ private fun SearchInputBar(
         keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = { onActionEvent(SearchInputEvent.Action.OnSearch) }),
         placeholder = { Text(text = stringResource(Res.string.global_search)) },
+        trailingIcon = {
+            IconButton(onClick = { onActionEvent(SearchInputEvent.Action.OnSearch) }) {
+                Icon(
+                    imageVector = BgmIcons.Search,
+                    contentDescription = stringResource(Res.string.global_search),
+                )
+            }
+        },
         colors = TextFieldDefaults.colors(
             focusedIndicatorColor = Color.Transparent,
             unfocusedIndicatorColor = Color.Transparent,

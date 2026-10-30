@@ -158,6 +158,7 @@ private fun DollarsScreenContent(
             horizontalArrangement = Arrangement.spacedBy(ContentMarginHalf),
         ) {
             BmgTextField(
+        showClearButton = true,
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(ContentMarginHalf),
                 value = state.value,

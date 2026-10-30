@@ -20,13 +20,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.xiaoyv.bangumi.core_resource.resources.Res
 import com.xiaoyv.bangumi.core_resource.resources.global_ok
+import com.xiaoyv.bangumi.core_resource.resources.home_shortcuts_confirm
 import com.xiaoyv.bangumi.core_resource.resources.settings_home_shortcuts_reorder
 import com.xiaoyv.bangumi.core_resource.resources.settings_home_shortcuts_sheet
 import com.xiaoyv.bangumi.shared.ui.component.tab.ComposeDrawableTab
@@ -83,7 +84,8 @@ fun HomeShortcutSheet(
         }
     }
 
-    var dragIndex by remember { mutableIntStateOf(-1) }
+    // 用条目 id 记录拖拽目标：重排后下标会变，只有 id 是稳定的。
+    var dragType by remember { mutableStateOf<Any?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     val rowHeightPx = with(LocalDensity.current) { ShortcutRowHeight.toPx() }
 
@@ -103,12 +105,6 @@ fun HomeShortcutSheet(
                     text = stringResource(Res.string.settings_home_shortcuts_sheet),
                     style = MaterialTheme.typography.titleLarge,
                 )
-                // 顶栏常驻的“确定”：列表再长也点得到，不依赖底部按钮是否被挤出可视区。
-                TextButton(
-                    onClick = { onApply(tabs.map { it.type.toString() }, hiddenIds.toList()) },
-                ) {
-                    Text(text = stringResource(Res.string.global_ok))
-                }
             }
             Text(
                 modifier = Modifier.padding(top = ContentMarginHalf, bottom = ContentMargin),
@@ -125,7 +121,7 @@ fun HomeShortcutSheet(
                 tabs.forEachIndexed { index, tab ->
                     key(tab.type) {
                         val visible = hiddenIds.none { it == tab.type }
-                        val dragging = index == dragIndex
+                        val dragging = dragType == tab.type
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -139,30 +135,28 @@ fun HomeShortcutSheet(
                                 .pointerInput(tab.type) {
                                     detectDragGesturesAfterLongPress(
                                         onDragStart = {
-                                            dragIndex = index
+                                            dragType = tab.type
                                             dragOffset = 0f
                                         },
                                         onDrag = { change, amount ->
                                             change.consume()
-                                            val from = dragIndex
+                                            val from = tabs.indexOfFirst { it.type == dragType }
                                             if (from < 0) return@detectDragGesturesAfterLongPress
                                             dragOffset += amount.y
                                             if (dragOffset > rowHeightPx / 2 && from < tabs.lastIndex) {
                                                 tabs.add(from + 1, tabs.removeAt(from))
-                                                dragIndex = from + 1
                                                 dragOffset -= rowHeightPx
                                             } else if (dragOffset < -rowHeightPx / 2 && from > 0) {
                                                 tabs.add(from - 1, tabs.removeAt(from))
-                                                dragIndex = from - 1
                                                 dragOffset += rowHeightPx
                                             }
                                         },
                                         onDragEnd = {
-                                            dragIndex = -1
+                                            dragType = null
                                             dragOffset = 0f
                                         },
                                         onDragCancel = {
-                                            dragIndex = -1
+                                            dragType = null
                                             dragOffset = 0f
                                         },
                                     )
@@ -200,8 +194,8 @@ fun HomeShortcutSheet(
                                 color = MaterialTheme.colorScheme.outline,
                             )
                         }
+                        HorizontalDivider()
                     }
-                    HorizontalDivider()
                 }
             }
 
@@ -211,7 +205,7 @@ fun HomeShortcutSheet(
                     .padding(top = ContentMargin),
                 onClick = { onApply(tabs.map { it.type.toString() }, hiddenIds.toList()) },
             ) {
-                Text(text = stringResource(Res.string.global_ok))
+                Text(text = stringResource(Res.string.home_shortcuts_confirm))
             }
         }
     }

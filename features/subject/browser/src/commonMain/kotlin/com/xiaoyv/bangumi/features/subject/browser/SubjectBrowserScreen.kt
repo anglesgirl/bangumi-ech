@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.xiaoyv.bangumi.core_resource.resources.Res
+import com.xiaoyv.bangumi.core_resource.resources.search_result_title
 import com.xiaoyv.bangumi.core_resource.resources.global_all
 import com.xiaoyv.bangumi.core_resource.resources.global_date
 import com.xiaoyv.bangumi.core_resource.resources.global_kind
@@ -56,6 +57,19 @@ import com.xiaoyv.bangumi.shared.ui.theme.BgmIconsMirrored
 import kotlinx.collections.immutable.toPersistentList
 import org.jetbrains.compose.resources.stringResource
 import org.orbitmvi.orbit.compose.collectAsState
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.xiaoyv.bangumi.core_resource.resources.global_cancel
+import com.xiaoyv.bangumi.core_resource.resources.global_ok
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 
 @Composable
 fun SubjectBrowserRoute(
@@ -87,6 +101,61 @@ private fun SubjectBrowserScreen(
     onUiEvent: (SubjectBrowserEvent.UI) -> Unit,
     onActionEvent: (SubjectBrowserEvent.Action) -> Unit,
 ) {
+    var showKeywordDialog by remember { mutableStateOf(false) }
+    var keywordInput by remember { mutableStateOf(uiState.data.param.browser.keyword) }
+
+    if (showKeywordDialog) {
+        AlertDialog(
+            onDismissRequest = { showKeywordDialog = false },
+            title = { Text(text = stringResource(Res.string.search_result_title)) },
+            text = {
+                OutlinedTextField(
+                    value = keywordInput,
+                    onValueChange = { keywordInput = it },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = {
+                        showKeywordDialog = false
+                        val body = uiState.data.param.browser
+                        val target = keywordInput.trim()
+                        if (target != body.keyword) {
+                            onActionEvent(
+                                SubjectBrowserEvent.Action.OnUpdateBrowserSubjectParam(
+                                    body = body.copy(keyword = target)
+                                )
+                            )
+                        }
+                    }),
+                    placeholder = { Text(text = stringResource(Res.string.global_search)) },
+                    trailingIcon = {
+                        IconButton(onClick = { keywordInput = "" }) {
+                            Icon(imageVector = Icons.Rounded.Close, contentDescription = null)
+                        }
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showKeywordDialog = false
+                    val body = uiState.data.param.browser
+                    val target = keywordInput.trim()
+                    if (target != body.keyword) {
+                        onActionEvent(
+                            SubjectBrowserEvent.Action.OnUpdateBrowserSubjectParam(
+                                body = body.copy(keyword = target)
+                            )
+                        )
+                    }
+                }) { Text(text = stringResource(Res.string.global_ok)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showKeywordDialog = false }) {
+                    Text(text = stringResource(Res.string.global_cancel))
+                }
+            },
+        )
+    }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
@@ -103,6 +172,10 @@ private fun SubjectBrowserScreen(
                                 append(" - ")
                                 append(param.browser.tags.joinToString("，"))
                             }
+                            if (param.browser.keyword.isNotBlank()) {
+                                append(" - ")
+                                append(param.browser.keyword)
+                            }
                         }
                     }
                 },
@@ -115,7 +188,7 @@ private fun SubjectBrowserScreen(
                             )
                         }
                     }
-                    IconButton(onClick = { onUiEvent(SubjectBrowserEvent.UI.OnNavScreen(Screen.SearchInput())) }) {
+                    IconButton(onClick = { showKeywordDialog = true }) {
                         Icon(
                             imageVector = BgmIcons.Search,
                             contentDescription = stringResource(Res.string.global_search)
@@ -164,7 +237,8 @@ private fun SubjectBrowserScreenContent(
                 .padding(vertical = ContentMarginHalf, horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            DropMenuChip(
+            // 从标签页进入时类型已在上层选过，这里隐藏类型切换。
+            if (!param.browser.hideTypeTabs) DropMenuChip(
                 labelPrefix = stringResource(Res.string.global_kind),
                 current = param.browser.subjectType,
                 options = TabTokens.subjectTypeTabs,

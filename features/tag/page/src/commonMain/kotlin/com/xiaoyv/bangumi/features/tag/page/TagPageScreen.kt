@@ -65,6 +65,7 @@ fun TagPageRoute(
 
     TagPageScreen(
         uiState = baseState,
+        subjectType = param.subjectType,
         pagingItems = pagingItems,
         onActionEvent = viewModel::onEvent,
         onUiEvent = {
@@ -78,6 +79,7 @@ fun TagPageRoute(
 @Composable
 private fun TagPageScreen(
     uiState: UiState<TagPageState>,
+    subjectType: Int,
     pagingItems: LazyPagingItems<ComposeTag>,
     onUiEvent: (TagPageEvent.UI) -> Unit,
     onActionEvent: (TagPageEvent.Action) -> Unit,
@@ -87,7 +89,7 @@ private fun TagPageScreen(
         onRefresh = { onActionEvent(TagPageEvent.Action.OnRefresh(it)) },
         uiState = uiState,
     ) { state ->
-        TagPageScreenContent(state, pagingItems, onUiEvent, onActionEvent)
+        TagPageScreenContent(state, subjectType, pagingItems, onUiEvent, onActionEvent)
     }
 }
 
@@ -95,6 +97,7 @@ private fun TagPageScreen(
 @Composable
 private fun TagPageScreenContent(
     state: TagPageState,
+    subjectType: Int,
     pagingItems: LazyPagingItems<ComposeTag>,
     onUiEvent: (TagPageEvent.UI) -> Unit,
     onActionEvent: (TagPageEvent.Action) -> Unit,
@@ -119,9 +122,10 @@ private fun TagPageScreenContent(
                     TagPageEvent.UI.OnNavScreen(
                         Screen.SubjectBrowser(
                             body = SubjectBrowserBody(
-                                subjectType = SubjectType.ANIME,
-                                sort = SubjectSortBrowserType.COLLECTS,
-                                tags = persistentListOf(item.name)
+                                subjectType = subjectType,
+                                sort = SubjectSortBrowserType.RANK,
+                                tags = persistentListOf(item.name),
+                                hideTypeTabs = true
                             )
                         )
                     )

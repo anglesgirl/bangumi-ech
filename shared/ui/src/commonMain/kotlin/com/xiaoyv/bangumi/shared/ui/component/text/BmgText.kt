@@ -31,6 +31,12 @@ import com.xiaoyv.bangumi.shared.ui.component.action.LocalActionHandler
 import com.xiaoyv.bangumi.shared.ui.component.image.html.BgmHtmlImageContent
 import com.xiaoyv.library.Html
 import com.xiaoyv.library.HtmlDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.Alignment
 
 @Composable
 fun textFieldTransparentColors() = TextFieldDefaults.colors(
@@ -48,6 +54,17 @@ fun textFieldTransparentColors() = TextFieldDefaults.colors(
  * @author why
  * @since 2025/1/25
  */
+@Composable
+private fun ClearButton(onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(
+            imageVector = Icons.Rounded.Close,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 @Composable
 fun BmgTextField(
     value: TextFieldValue,
@@ -76,6 +93,7 @@ fun BmgTextField(
     interactionSource: MutableInteractionSource? = null,
     shape: Shape = TextFieldDefaults.shape,
     colors: TextFieldColors = TextFieldDefaults.colors(),
+    showClearButton: Boolean = false,
 ) {
     @Suppress("NAME_SHADOWING")
     val interactionSource = interactionSource ?: remember { MutableInteractionSource() }
@@ -114,7 +132,18 @@ fun BmgTextField(
                         label = label,
                         contentPadding = contentPadding,
                         leadingIcon = leadingIcon,
-                        trailingIcon = trailingIcon,
+                        trailingIcon = if (showClearButton || trailingIcon != null) {
+                {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (showClearButton) {
+                            ClearButton(onClick = { onValueChange(value.copy(text = "")) })
+                        }
+                        trailingIcon?.invoke()
+                    }
+                }
+            } else {
+                null
+            },
                         prefix = prefix,
                         suffix = suffix,
                         supportingText = supportingText,

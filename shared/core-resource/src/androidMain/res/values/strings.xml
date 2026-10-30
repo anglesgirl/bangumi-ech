@@ -15,6 +15,7 @@
     <string name="global_password">密码</string>
     <string name="global_email">邮箱</string>
     <string name="global_confirm">确认</string>
+    <string name="home_shortcuts_confirm">确定</string>
     <string name="global_cancel">取消</string>
     <string name="global_clear">清理</string>
     <string name="global_done">完成</string>
@@ -387,6 +388,8 @@
     <string name="settings_live2d_size_150">大号 (150dp)</string>
     <string name="settings_live2d_size_175">特大 (175dp)</string>
     <string name="settings_live2d_size_200">超大 (200dp)</string>
+    <string name="search_tag_title">搜索标签</string>
+    <string name="search_result_title">搜索结果</string>
     <string name="settings_ui">UI 配置</string>
     <string name="settings_home_shortcuts">首页快捷入口</string>
     <string name="settings_home_shortcuts_summary">自定义排序或隐藏入口</string>
