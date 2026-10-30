@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import com.xiaoyv.bangumi.core_resource.resources.Res
+import com.xiaoyv.bangumi.core_resource.resources.search_tag_title
 import com.xiaoyv.bangumi.core_resource.resources.global_search
 import com.xiaoyv.bangumi.core_resource.resources.global_tag
 import com.xiaoyv.bangumi.features.tag.detail.business.TagDetailEvent
@@ -29,6 +30,20 @@ import com.xiaoyv.bangumi.shared.ui.kts.collectBaseSideEffect
 import com.xiaoyv.bangumi.shared.ui.theme.BgmIcons
 import org.jetbrains.compose.resources.stringResource
 import org.orbitmvi.orbit.compose.collectAsState
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.xiaoyv.bangumi.core_resource.resources.global_cancel
+import com.xiaoyv.bangumi.core_resource.resources.global_ok
+import com.xiaoyv.bangumi.shared.data.model.request.list.tag.TagSearchBody
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 
 @Composable
 fun TagDetailRoute(
@@ -61,13 +76,55 @@ private fun TagDetailScreen(
     onActionEvent: (TagDetailEvent.Action) -> Unit,
 ) {
 
+    var showTagSearchDialog by remember { mutableStateOf(false) }
+    var tagKeyword by remember { mutableStateOf("") }
+    var tagKeywordInput by remember { mutableStateOf("") }
+
+    if (showTagSearchDialog) {
+        AlertDialog(
+            onDismissRequest = { showTagSearchDialog = false },
+            title = { Text(text = stringResource(Res.string.search_tag_title)) },
+            text = {
+                OutlinedTextField(
+                    value = tagKeywordInput,
+                    onValueChange = { tagKeywordInput = it },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = {
+                        showTagSearchDialog = false
+                        tagKeyword = tagKeywordInput.trim()
+                    }),
+                    placeholder = { Text(text = stringResource(Res.string.global_search)) },
+                    trailingIcon = {
+                        IconButton(onClick = { tagKeywordInput = "" }) {
+                            Icon(imageVector = Icons.Rounded.Close, contentDescription = null)
+                        }
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showTagSearchDialog = false
+                    tagKeyword = tagKeywordInput.trim()
+                }) { Text(text = stringResource(Res.string.global_ok)) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showTagSearchDialog = false
+                    tagKeywordInput = ""
+                    tagKeyword = ""
+                }) { Text(text = stringResource(Res.string.global_cancel)) }
+            },
+        )
+    }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
             BgmTopAppBar(
                 title = stringResource(Res.string.global_tag),
                 actions = {
-                    IconButton(onClick = { onUiEvent(TagDetailEvent.UI.OnNavScreen(Screen.SearchInput())) }) {
+                    IconButton(onClick = { showTagSearchDialog = true }) {
                         Icon(
                             imageVector = BgmIcons.Search,
                             contentDescription = stringResource(Res.string.global_search)
@@ -85,7 +142,7 @@ private fun TagDetailScreen(
             onRefresh = { onActionEvent(TagDetailEvent.Action.OnRefresh(it)) },
             uiState = uiState,
         ) { state ->
-            TagDetailScreenContent(state, onUiEvent, onActionEvent)
+            TagDetailScreenContent(state, tagKeyword, onUiEvent, onActionEvent)
         }
     }
 }
@@ -94,6 +151,7 @@ private fun TagDetailScreen(
 @Composable
 private fun TagDetailScreenContent(
     state: TagDetailState,
+    tagKeyword: String,
     onUiEvent: (TagDetailEvent.UI) -> Unit,
     onActionEvent: (TagDetailEvent.Action) -> Unit,
 ) {
@@ -103,10 +161,12 @@ private fun TagDetailScreenContent(
         initialPage = subjectTypeTabs.indexOfFirst { it.type == state.type }.coerceAtLeast(0),
     ) {
         TagPageRoute(
-            param = remember(state.type) {
+            param = remember(state.type, tagKeyword) {
+                val subjectType = subjectTypeTabs[it].type
                 ListTagParam(
-                    type = ListTagType.BROWSER,
-                    subjectType = subjectTypeTabs[it].type
+                    type = if (tagKeyword.isBlank()) ListTagType.BROWSER else ListTagType.SEARCH,
+                    subjectType = subjectType,
+                    search = TagSearchBody(keyword = tagKeyword, subjectType = subjectType)
                 )
             },
             onNavScreen = { screen ->

@@ -27,6 +27,12 @@ data class SubjectBrowserBody(
      */
     @SerialName("hideSortFilter") val hideSortFilter: Boolean = false,
     @SerialName("hideDateFilter") val hideDateFilter: Boolean = false,
+
+    /** 结果页的关键词过滤；从标签页进入时用于“在本结果页内搜索”。 */
+    @SerialName("keyword") val keyword: String = "",
+
+    /** 从标签页进入时隐藏结果页的类型切换（类型已在标签页选过）。 */
+    @SerialName("hideTypeTabs") val hideTypeTabs: Boolean = false,
 ) {
     val uniqueKey = buildString {
         append(subjectType)
@@ -46,6 +52,10 @@ data class SubjectBrowserBody(
         append(hideSortFilter)
         append("-")
         append(hideDateFilter)
+        append("-")
+        append(keyword)
+        append("-")
+        append(hideTypeTabs)
     }
 
     fun searchData(): SerializeList<String>? {

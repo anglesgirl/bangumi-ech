@@ -144,6 +144,7 @@ private fun GardenScreenContent(
         val keyboardController = LocalSoftwareKeyboardController.current
 
         BmgTextField(
+        showClearButton = true,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp),
