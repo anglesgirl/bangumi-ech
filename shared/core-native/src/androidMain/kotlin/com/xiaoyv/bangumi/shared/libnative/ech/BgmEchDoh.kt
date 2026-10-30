@@ -1,7 +1,6 @@
 package com.xiaoyv.bangumi.shared.libnative.ech
 
 import android.util.Base64
-import android.util.Log
 import com.xiaoyv.bangumi.shared.libnative.application
 import okhttp3.Dns
 import okhttp3.HttpUrl
@@ -60,9 +59,6 @@ private const val REFERENCE_ECH_HOST = "cloudflare-ech.com"
 
 /** 同一主机后台刷新在线数据的最小间隔，避免网关抖动时反复重试。 */
 private const val REFRESH_MIN_INTERVAL_MILLIS = 60 * 1000L
-
-/** 日志标签。 */
-private const val TAG = "BGM-ECH-DOH"
 
 /**
  * ECH 活值的候选：**国内三家的纯 IP 端点**（阿里 / 腾讯 / 360，各带一个备份）。
@@ -209,6 +205,11 @@ internal object BgmEchDoh {
         preferences.edit().putBoolean("ownfirst:$host", true).commit()
     }
 
+    fun preferReferenceRecordFirst(hostname: String) {
+        val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
+        preferences.edit().remove("ownfirst:$host").commit()
+    }
+
     fun markPreferHints(hostname: String) {
         val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
         if (preferHints(host)) return
@@ -332,6 +333,30 @@ internal object BgmEchDoh {
 
     fun echConfig(hostname: String): ByteArray = echConfig(hostname, bestEffort = false)
 
+    /** TLS/ECH 拒绝后的单次重试：强制在线重取官方配置，失败时仅回退到新取的自身记录。 */
+    fun echConfigAfterRejection(hostname: String): ByteArray {
+        val host = hostname.lowercase(Locale.ROOT).trimEnd('.')
+        synchronized(lockFor(host)) {
+            val fresh = try {
+                fetchConfigFromGateway(
+                    host = REFERENCE_ECH_HOST,
+                    bestEffort = false,
+                    forceFreshReference = true,
+                    bypassCooldown = true,
+                ).also { adoptConfig(host, it) }
+            } catch (_: Exception) {
+                // 官方源不可达时，只再在线查询一次目标自身记录；不读旧缓存，也不降级到明文。
+                fetchConfigFromGateway(
+                    host = host,
+                    bestEffort = false,
+                    bypassCooldown = true,
+                )
+            }
+            preferences.edit().remove("blocked_until").commit()
+            return fresh
+        }
+    }
+
     /**
      * 返回首个可用的 DoH 网关 URL（给 kathttp3 的 DohResolver 用）。
      */
@@ -433,17 +458,23 @@ internal object BgmEchDoh {
      * 单飞（synchronized + 双检 + 失败短冷却）：预热是并发的，这里保证同一时刻只打一家，
      * 不会把同一家重复打；拿到的值立刻进内存缓存、落盘缓存与官方源名下。
      */
-    private fun fetchLiveEch(): ByteArray? {
-        liveEntry?.let { if (it.until > now()) return it.value.wire }
-        if (now() - liveFailedAt < LIVE_FAIL_COOLDOWN_MILLIS) return null
-        synchronized(liveLock) {
+    private fun fetchLiveEch(forceFresh: Boolean = false): ByteArray? {
+        if (!forceFresh) {
             liveEntry?.let { if (it.until > now()) return it.value.wire }
+            if (now() - liveFailedAt < LIVE_FAIL_COOLDOWN_MILLIS) return null
+        }
+        synchronized(liveLock) {
+            if (!forceFresh) {
+                liveEntry?.let { if (it.until > now()) return it.value.wire }
+                if (now() - liveFailedAt < LIVE_FAIL_COOLDOWN_MILLIS) return null
+            }
             val hit = queryLiveEch()
             if (hit == null) {
                 liveFailedAt = now()
                 return null
             }
             val ttlMillis = hit.ttlMillis
+            liveFailedAt = 0L
             liveEntry = Entry(hit, now() + ttlMillis)
             // 成功值同时记到官方源名下，这样 adoptConfig 能把它（连 hints）复制给目标域名。
             if (hit.hints.isNotEmpty()) {
@@ -462,12 +493,9 @@ internal object BgmEchDoh {
         for (ip in ECH_DOH_IPS.shuffled()) {
             val hit = runCatching { queryEchWire(ip, REFERENCE_ECH_HOST) }.getOrNull()
             if (hit != null) {
-                Log.i(TAG, "live ech via $ip: ${hit.wire.size} bytes, ttl=${hit.ttlMillis}ms, hints=${hit.hints.size}")
                 return hit
             }
-            Log.i(TAG, "live ech via $ip failed, next")
         }
-        Log.i(TAG, "live ech unavailable: ${ECH_DOH_IPS.size} domestic ips all failed")
         return null
     }
 
@@ -569,14 +597,20 @@ internal object BgmEchDoh {
     }
 
     /** 从网关按域名取 ECH 记录（含 ipv4hint）并落盘。 */
-    private fun fetchConfigFromGateway(host: String, bestEffort: Boolean): ByteArray {
+    private fun fetchConfigFromGateway(
+        host: String,
+        bestEffort: Boolean,
+        forceFreshReference: Boolean = false,
+        bypassCooldown: Boolean = false,
+    ): ByteArray {
         // 官方活源先走国内三家纯 IP（wire，实测与 CF 官方逐字节相同）；三家都不通才回退原有的网关 JSON 链路。
         // 这一步刻意放在 guarded 之外：冷却/退避是给网关池的，别把纯 IP 这条更快的路一起冻住。
         if (host == REFERENCE_ECH_HOST) {
-            fetchLiveEch()?.let { live -> return live }
+            val live = if (forceFreshReference) fetchLiveEch(forceFresh = true) else fetchLiveEch()
+            live?.let { return it }
         }
         val pool = endpoints
-        return guarded(bestEffort) {
+        return guarded(bestEffort, bypassCooldown = bypassCooldown || forceFreshReference) {
             val json = fetch(pool, host, "HTTPS")
             val answer = json.getJSONArray("Answer")
             var selected: ByteArray? = null
@@ -601,10 +635,19 @@ internal object BgmEchDoh {
         }
     }
 
-    private fun <T> guarded(bestEffort: Boolean, block: () -> T): T {
+    private fun <T> guarded(
+        bestEffort: Boolean,
+        bypassCooldown: Boolean = false,
+        block: () -> T,
+    ): T {
+        // 缺少网关是固定配置错误，不应伪装成临时冷却。
+        if (endpoints.isEmpty()) {
+            preferences.edit().remove("blocked_until").commit()
+            throw IOException("未配置 ECH 网关")
+        }
         val current = now()
         val blockedUntil = preferences.getLong("blocked_until", 0)
-        if (blockedUntil > current) {
+        if (!bypassCooldown && blockedUntil > current) {
             throw IOException("DoH 冷却中，剩余 ${(blockedUntil - current + 999) / 1000} 秒")
         }
         return try {

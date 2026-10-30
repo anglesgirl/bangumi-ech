@@ -25,6 +25,8 @@ import javax.net.ssl.SSLSocketFactory
  * 复用同一套栈（本文件的客户端是它们的基础）。
  */
 internal object BgmEchTransport {
+    private val retryingHost = ThreadLocal<String>()
+
     fun configure(builder: OkHttpClient.Builder) {
         val original = builder.build()
         val trustManager = original.x509TrustManager
@@ -94,15 +96,17 @@ internal object BgmEchTransport {
                 // Conscrypt 把 ECH 被拒报成 SSLException，但有些机型/版本会包成普通 IOException，
                 // 所以按"是否是 TLS 层失败"判断，别把普通断网也当成配置问题重试。
                 if (!error.isTlsFailure()) throw error
-                // 两种可能：缓存里的配置已过期（CF 约 5 小时轮换），或这个地址不接受本 zone 的配置。
-                // 丢掉配置、并记住下次优先用 ECH 记录里的地址，然后重试一次；
-                // 仍失败就如实抛错（fail-closed，不回落明文）。
+                // 两种可能：配置已轮换，或这个地址不接受当前 ECH 配置；清掉两侧缓存后只重试一次。
+                // 第二次会强制在线查询官方值；仍失败则阻断，不回落明文。
                 BgmEchDoh.invalidateConfig(request.url.host)
                 BgmEchDoh.markPreferHints(request.url.host)
-                // 也可能是这份配置本身已经失效：翻成"用它自己的记录"，下次换另一条路取配置，
-                // 否则会一直拿同一份去撞（实测手写/注入的记录过期后怎么拉都是旧的）。
-                BgmEchDoh.markOwnRecordFirst(request.url.host)
-                chain.proceed(request)
+                BgmEchDoh.preferReferenceRecordFirst(request.url.host)
+                retryingHost.set(request.url.host)
+                try {
+                    chain.proceed(request)
+                } finally {
+                    retryingHost.remove()
+                }
             }
         })
         // OkHttp 内部重定向的每一跳再次校验，禁止向保护域名发送明文 HTTP。
@@ -141,7 +145,11 @@ internal object BgmEchTransport {
         override fun createSocket(raw: Socket, host: String, port: Int, autoClose: Boolean): Socket {
             if (!BgmEchPolicy.isProtected(host)) return original.createSocket(raw, host, port, autoClose)
             // 先取配置再建 TLS Socket，失败时不留下未关闭的 Socket。
-            val config = BgmEchDoh.echConfig(host)
+            val config = if (retryingHost.get()?.equals(host, ignoreCase = true) == true) {
+                BgmEchDoh.echConfigAfterRejection(host)
+            } else {
+                BgmEchDoh.echConfig(host)
+            }
             val socket = ech.createSocket(raw, host, port, autoClose)
             try {
                 if (socket !is SSLSocket) throw IOException("ECH 需要 TLS Socket")

@@ -1,6 +1,10 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
-val appVersionCode = providers.gradleProperty("appVersionCode").get().toInt()
+val appVersionCode = providers.environmentVariable("GITHUB_RUN_NUMBER")
+    .orNull
+    ?.toInt()
+    ?.let { 2026103000 + it }
+    ?: providers.gradleProperty("appVersionCode").get().toInt()
 val appVersionName = providers.gradleProperty("appVersionName").get()
 
 plugins {

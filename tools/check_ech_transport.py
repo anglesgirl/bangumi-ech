@@ -53,7 +53,11 @@ checks = {
     '配置首选 CF 官方 ECH 域名的实时值': 'REFERENCE_ECH_HOST = "cloudflare-ech.com"' in doh
         and 'val first = if (ownRecordFirst(host)) host else REFERENCE_ECH_HOST' in doh
         and 'adoptConfig(host, config)' in doh,
-    '被拒后翻成用该域名自己的记录': 'markOwnRecordFirst' in transport and 'ownfirst:' in doh,
+    '被拒后清除 ownfirst 并优先官方新配置': 'preferReferenceRecordFirst' in transport
+        and 'echConfigAfterRejection(host)' in transport
+        and 'markOwnRecordFirst' not in transport
+        and 'forceFreshReference = true' in doh
+        and 'fetchLiveEch(forceFresh = true)' in doh,
     '失效时连官方缓存一起丢': 'configs.remove(REFERENCE_ECH_HOST)' in doh,
     '握手失败丢缓存并用在线配置重试一次': 'invalidateConfig(request.url.host)' in transport
         and 'isTlsFailure()' in transport
@@ -82,10 +86,19 @@ checks = {
     '活值走国内三家纯 IP': 'BUILTIN_DOH_IPS' in doh and all(ip in doh for ip in (
         '223.5.5.5', '223.6.6.6', '1.12.12.12', '120.53.53.53', '101.198.193.29', '101.198.192.33'))
         and 'ech_doh_ips' in doh,
-    '活值随机挑一家、失败换下一家': 'ECH_DOH_IPS.shuffled()' in doh and 'live ech via' in doh,
+    '活值随机挑一家、失败换下一家': 'ECH_DOH_IPS.shuffled()' in doh
+        and 'queryEchWire(ip, REFERENCE_ECH_HOST)' in doh
+        and 'if (hit != null)' in doh,
     '活值只认 wire 且仍保留网关 JSON 链路': 'application/dns-message' in doh
         and 'application/dns-json' in doh and 'LIVE_ONE_TIMEOUT_MILLIS' in doh,
-    '活值优先、失败才回落网关': 'fetchLiveEch()?.let { live -> return live }' in doh,
+    '活值优先、失败才回落网关': 'else fetchLiveEch()' in doh
+        and 'live?.let { return it }' in doh
+        and 'application/dns-message' in doh and 'application/dns-json' in doh,
+    '唯一一次重试可绕过旧冷却并保留失败退避': 'bypassCooldown = bypassCooldown || forceFreshReference' in doh
+        and 'if (!bypassCooldown && blockedUntil > current)' in doh
+        and transport.count('chain.proceed(request)') == 2,
+    '缺少网关时报配置错误而非冷却': 'if (endpoints.isEmpty())' in doh
+        and 'remove("blocked_until")' in doh and '未配置 ECH 网关' in doh,
     '活值单飞（并发预热不重复打同一家）': 'synchronized(liveLock)' in doh and 'liveFailedAt' in doh,
     'ECH 配置落盘到 ech_state': '"ech_state"' in state
         and 'BgmEchState.save' in doh and 'BgmEchState.load' in doh,
